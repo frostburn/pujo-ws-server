@@ -1,11 +1,18 @@
 {
   "name": "pujo-ws-server",
+  "version": "0.0.1",
   "module": "index.ts",
   "type": "module",
   "devDependencies": {
-    "bun-types": "latest"
+    "@types/minimist": "^1.2.4",
+    "@types/node": "^20.8.7",
+    "bun-types": "latest",
+    "minimist": "^1.2.8"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "pujo-puyo-core": "github:frostburn/pujo-puyo-core"
   }
 }

@@ -1,4 +1,8 @@
 {
+  "include": [
+    "package.json",
+    "package-lock.json"
+  ],
   "compilerOptions": {
     "lib": ["ESNext"],
     "module": "esnext",
