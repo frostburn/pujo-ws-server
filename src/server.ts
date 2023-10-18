@@ -10,7 +10,7 @@ import {
   randomColorSelection,
   randomSeed,
 } from 'pujo-puyo-core';
-import {CLIENT_INFO} from './src/util';
+import {CLIENT_INFO} from './util';
 
 let LOG = false;
 
@@ -131,7 +131,7 @@ class WebSocketGameSession {
   waitingForMove: boolean[];
   done: boolean;
   hiddenMove: Move | null;
-  timeouts: (NodeJS.Timeout | null)[];
+  timeouts: (Timer | null)[];
 
   constructor(player: Player) {
     this.gameSeed = randomSeed();

@@ -12,14 +12,17 @@ import {
 } from 'pujo-puyo-core';
 
 import argParse from 'minimist';
-import {CLIENT_INFO} from './src/util';
+import {CLIENT_INFO} from './util';
 
 const args = argParse(process.argv.slice(2));
 
 args.server = args.server || 'ws://localhost:3003';
 args.bot = args.bot || 'flex2';
 
-const BOTS = {
+const BOTS: Record<
+  string,
+  {name: string; strategy: typeof nullStrategy | typeof randomStrategy}
+> = {
   null: {
     name: 'Null (bot)',
     strategy: nullStrategy,
@@ -60,7 +63,12 @@ let losses = 0;
 let timer: FischerTimer | null = null;
 
 socket.addEventListener('message', event => {
-  const data = JSON.parse(event.data);
+  let data: any;
+  if (event.data instanceof Buffer) {
+    data = JSON.parse(event.data.toString());
+  } else {
+    data = JSON.parse(event.data);
+  }
   if (args.verbose) {
     console.log('Message received', data);
   }
