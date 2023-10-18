@@ -10,7 +10,7 @@ import {
   randomColorSelection,
   randomSeed,
 } from 'pujo-puyo-core';
-import { CLIENT_INFO } from './util';
+import {CLIENT_INFO} from './src/util';
 
 let LOG = false;
 

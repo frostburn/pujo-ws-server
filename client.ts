@@ -1,5 +1,4 @@
 import {
-  ApplicationInfo,
   FischerTimer,
   MOVES,
   MultiplayerGame,
@@ -12,9 +11,8 @@ import {
   randomStrategy,
 } from 'pujo-puyo-core';
 
-
 import argParse from 'minimist';
-import { CLIENT_INFO } from './util';
+import {CLIENT_INFO} from './src/util';
 
 const args = argParse(process.argv.slice(2));
 
@@ -177,13 +175,17 @@ socket.addEventListener('message', event => {
       losses++;
     }
     console.log(`Game Over: ${data.result}, ${data.reason}`);
-    socket.send(JSON.stringify({type: 'game request', name, clientInfo: CLIENT_INFO}));
+    socket.send(
+      JSON.stringify({type: 'game request', name, clientInfo: CLIENT_INFO})
+    );
   }
 });
 
 socket.addEventListener('open', () => {
   console.log('Connection established.');
-  socket.send(JSON.stringify({type: 'game request', name, clientInfo: CLIENT_INFO}));
+  socket.send(
+    JSON.stringify({type: 'game request', name, clientInfo: CLIENT_INFO})
+  );
 });
 
 socket.addEventListener('close', event => {

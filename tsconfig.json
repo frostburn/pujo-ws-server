@@ -1,9 +1,11 @@
 {
-  "include": [
-    "package.json",
-    "package-lock.json"
-  ],
+  "extends": "./node_modules/gts/tsconfig-google.json",
   "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "build",
+    "types": [
+      "bun-types" // add Bun global
+    ],
     "lib": ["ESNext"],
     "module": "esnext",
     "target": "esnext",
@@ -19,8 +21,11 @@
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
     "allowJs": true,
-    "types": [
-      "bun-types" // add Bun global
-    ]
-  }
+  },
+  "include": [
+    "src/**/*.ts",
+    "test/**/*.ts",
+    "package.json",
+    "package-lock.json"     
+  ]
 }

@@ -5,14 +5,25 @@
   "type": "module",
   "devDependencies": {
     "@types/minimist": "^1.2.4",
-    "@types/node": "^20.8.7",
+    "@types/node": "20.8.2",
     "bun-types": "latest",
-    "minimist": "^1.2.8"
+    "gts": "^5.2.0",
+    "minimist": "^1.2.8",
+    "typescript": "~5.2.0"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"
   },
   "dependencies": {
     "pujo-puyo-core": "github:frostburn/pujo-puyo-core"
+  },
+  "scripts": {
+    "lint": "gts lint",
+    "clean": "gts clean",
+    "compile": "tsc",
+    "fix": "gts fix",
+    "prepare": "npm run compile",
+    "pretest": "npm run compile",
+    "posttest": "npm run lint"
   }
 }

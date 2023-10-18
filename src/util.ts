@@ -1,10 +1,9 @@
 import {ApplicationInfo} from 'pujo-puyo-core';
-import {packages} from './package-lock.json';
-import {name as appName, version} from './package.json';
+import {packages} from '../package-lock.json';
+import {name as appName, version} from '../package.json';
 
 const commitHash = Bun.spawnSync(['git', 'rev-parse', '--short', 'HEAD'])
-  .stdout
-  .toString()
+  .stdout.toString()
   .trim();
 
 const core = packages['node_modules/pujo-puyo-core'];
