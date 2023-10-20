@@ -24,6 +24,7 @@
   },
   "include": [
     "src/**/*.ts",
+    "src/**/*.js",
     "test/**/*.ts",
     "package.json",
     "package-lock.json"     

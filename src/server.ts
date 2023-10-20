@@ -175,6 +175,7 @@ class WebSocketGameSession {
   start() {
     const metadata: ReplayMetadata = {
       names: this.players.map(p => p.name),
+      elos: [1000, 1000],
       priorWins: [0, 0],
       event: 'Free Play (alpha)',
       site: 'https://pujo.lumipakkanen.com',
