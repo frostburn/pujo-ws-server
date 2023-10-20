@@ -15,7 +15,10 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "pujo-puyo-core": "github:frostburn/pujo-puyo-core"
+    "dotenv": "^16.3.1",
+    "pg": "^8.11.3",
+    "pujo-puyo-core": "github:frostburn/pujo-puyo-core",
+    "ws": "^8.14.2"
   },
   "scripts": {
     "lint": "gts lint",
