@@ -4,10 +4,8 @@ const K_FACTOR = 32;
 export function updateElos(ratingA, ratingB, resultA) {
   const resultB = 1 - resultA;
 
-  const logisticFactor = Math.pow(10, (ratingB - ratingA) / 400);
-
-  const expectedA = 1 / (1 + logisticFactor);
-  const expectedB = logisticFactor / (1 + logisticFactor);
+  const expectedA = 1 / (1 + Math.pow(10, (ratingB - ratingA) / 400));
+  const expectedB = 1 - expectedA;
 
   return [
     ratingA + K_FACTOR * (resultA - expectedA),

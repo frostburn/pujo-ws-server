@@ -17,7 +17,8 @@
   "dependencies": {
     "dotenv": "^16.3.1",
     "postgres": "^3.4.0",
-    "pujo-puyo-core": "github:frostburn/pujo-puyo-core"
+    "pujo-puyo-core": "github:frostburn/pujo-puyo-core",
+    "ws": "^8.14.2"
   },
   "engines": {
     "node": ">=18.13.0"
@@ -31,5 +32,9 @@
     "prepare": "npm run compile",
     "pretest": "npm run compile",
     "posttest": "npm run lint"
+  },
+  "optionalDependencies": {
+    "bufferutil": "^4.0.8",
+    "utf-8-validate": "^6.0.3"
   }
 }

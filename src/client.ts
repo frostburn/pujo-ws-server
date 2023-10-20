@@ -10,9 +10,11 @@ import {
   nullStrategy,
   randomStrategy,
 } from 'pujo-puyo-core';
-
+import {config} from 'dotenv';
 import argParse from 'minimist';
 import {CLIENT_INFO} from './util';
+
+config();
 
 const args = argParse(process.argv.slice(2));
 
@@ -21,32 +23,42 @@ args.bot = args.bot || 'flex2';
 
 const BOTS: Record<
   string,
-  {name: string; strategy: typeof nullStrategy | typeof randomStrategy}
+  {
+    name: string;
+    strategy: typeof nullStrategy | typeof randomStrategy;
+    authUuid: string;
+  }
 > = {
   null: {
     name: 'Null (bot)',
     strategy: nullStrategy,
+    authUuid: process.env.BOT_UUID_NULL || crypto.randomUUID(),
   },
   random: {
     name: 'Random (bot)',
     strategy: randomStrategy,
+    authUuid: process.env.BOT_UUID_RANDOM || crypto.randomUUID(),
   },
   flex1: {
     name: 'FlexDroplet1 (bot)',
     strategy: flexDropletStrategy1,
+    authUuid: process.env.BOT_UUID_FLEX1 || crypto.randomUUID(),
   },
   flex2: {
     name: 'FlexDroplet2 (bot)',
     strategy: flexDropletStrategy2,
+    authUuid: process.env.BOT_UUID_FLEX2 || crypto.randomUUID(),
   },
   flex3: {
     name: 'FlexDroplet3 (bot)',
     strategy: flexDropletStrategy3,
+    authUuid: process.env.BOT_UUID_FLEX3 || crypto.randomUUID(),
   },
 };
 
 const bot = BOTS[args.bot].strategy;
 const name = BOTS[args.bot].name;
+const authUuid = BOTS[args.bot].authUuid;
 
 console.log(`Runnig ${name}. Connecting to ${args.server}`);
 
@@ -61,6 +73,8 @@ let draws = 0;
 let losses = 0;
 
 let timer: FischerTimer | null = null;
+
+let elo = 1000;
 
 socket.addEventListener('message', event => {
   let data: any;
@@ -114,7 +128,9 @@ socket.addEventListener('message', event => {
       game.log();
       console.log('Identity:', identity);
       console.log('Heuristic score:', strategy.score);
-      console.log(`Wins / Draws / Losses: ${wins} / ${draws} / ${losses}`);
+      console.log(
+        `Wins / Draws / Losses: ${wins} / ${draws} / ${losses}, (${elo})`
+      );
 
       let response;
       if (strategy.move === PASS) {
@@ -184,15 +200,29 @@ socket.addEventListener('message', event => {
     }
     console.log(`Game Over: ${data.result}, ${data.reason}`);
     socket.send(
-      JSON.stringify({type: 'game request', name, clientInfo: CLIENT_INFO})
+      JSON.stringify({
+        type: 'game request',
+        name,
+        authUuid,
+        clientInfo: CLIENT_INFO,
+      })
     );
+  }
+  if (data.type === 'user') {
+    console.log(`Setting Elo rating to ${data.elo}`);
+    elo = data.elo;
   }
 });
 
 socket.addEventListener('open', () => {
   console.log('Connection established.');
   socket.send(
-    JSON.stringify({type: 'game request', name, clientInfo: CLIENT_INFO})
+    JSON.stringify({
+      type: 'game request',
+      name,
+      authUuid,
+      clientInfo: CLIENT_INFO,
+    })
   );
 });
 
