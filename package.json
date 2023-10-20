@@ -15,9 +15,15 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
+    "dotenv": "^16.3.1",
+    "postgres": "^3.4.0",
     "pujo-puyo-core": "github:frostburn/pujo-puyo-core"
   },
+  "engines": {
+    "node": ">=18.13.0"
+  },
   "scripts": {
+    "init-db": "node src/init-db.js",
     "lint": "gts lint",
     "clean": "gts clean",
     "compile": "tsc",
