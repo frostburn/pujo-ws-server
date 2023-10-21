@@ -105,16 +105,13 @@ function sanitizeMove(player: number, content: any): Move {
 class Player {
   socket: ServerWebSocket<{socketId: number}>;
   name: string;
+  elo: number;
   clientInfo?: ApplicationInfo;
 
-  constructor(
-    socket: ServerWebSocket<{socketId: number}>,
-    name: string,
-    clientInfo?: ApplicationInfo
-  ) {
+  constructor(socket: ServerWebSocket<{socketId: number}>, name: string) {
     this.socket = socket;
     this.name = name;
-    this.clientInfo = clientInfo;
+    this.elo = 1000;
   }
 
   send(message: any) {
@@ -419,6 +416,10 @@ class WebSocketGameSession {
 const playerBySocketId: Map<number, Player> = new Map();
 const sessionBySocketId: Map<number, WebSocketGameSession> = new Map();
 
+// Bun is still a bit rough around the edges so we spawn a Node process to handle postgres.
+const databaseAuthorization = crypto.randomUUID();
+let databaseSocket: ServerWebSocket<{socketId: number}> | null = null;
+
 const server = Bun.serve<{socketId: number}>({
   fetch(req, server) {
     const success = server.upgrade(req, {
@@ -459,12 +460,42 @@ const server = Bun.serve<{socketId: number}>({
 
       let content;
       if (message instanceof Buffer) {
-        content = message.toJSON();
+        content = JSON.parse(message.toString());
       } else {
         content = JSON.parse(message);
       }
 
+      if (content.type === 'database:hello') {
+        if (content.authorization === databaseAuthorization) {
+          console.log('Database connection established.');
+          databaseSocket = ws;
+        } else {
+          console.error(
+            `Fraudulent database connection detected: auth = ${content.authorization} != ${databaseAuthorization}`
+          );
+        }
+        return;
+      }
+
+      if (
+        content.type === 'database:user' &&
+        content.authorization === databaseAuthorization
+      ) {
+        const receiver = playerBySocketId.get(content.socketId);
+        if (receiver) {
+          receiver.elo = content.payload.elo;
+          receiver.send(content.payload);
+        }
+        return;
+      }
+
       const player = playerBySocketId.get(ws.data.socketId)!;
+
+      if (content.type === 'user request' && databaseSocket) {
+        content.socketId = ws.data.socketId;
+        databaseSocket.send(JSON.stringify(content));
+        return;
+      }
 
       if (content.type === 'game request') {
         if (content.name !== undefined) {
@@ -472,6 +503,16 @@ const server = Bun.serve<{socketId: number}>({
         }
         if (content.clientInfo !== undefined) {
           player.clientInfo = sanitizeClientInfo(content.clientInfo);
+        }
+        if (content.authUuid !== undefined && databaseSocket) {
+          databaseSocket.send(
+            JSON.stringify({
+              type: 'user request',
+              username: content.name,
+              authUuid: content.authUuid,
+              socketId: ws.data.socketId,
+            })
+          );
         }
         // Disregard request if already in game
         if (sessionBySocketId.has(ws.data.socketId)) {
@@ -504,3 +545,7 @@ const server = Bun.serve<{socketId: number}>({
 });
 
 console.log(`Listening on ${server.hostname}:${server.port}`);
+
+Bun.spawnSync(['node', 'src/db-client.js', databaseAuthorization], {
+  stdout: 'inherit',
+});
