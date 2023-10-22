@@ -107,7 +107,8 @@ socket.addEventListener('message', event => {
     mirrorGame = new MultiplayerGame(
       null,
       data.colorSelection,
-      data.screenSeed
+      data.screenSeed,
+      data.targetPoints
     );
     identity = data.identity;
     timer = FischerTimer.fromString(data.metadata.timeControl);

@@ -16,6 +16,7 @@ const METADATA_FIELDS = [
   'site',
   'round',
   'msSince1970',
+  'gameType',
   'endTime',
   'annotator',
   'timeControl',

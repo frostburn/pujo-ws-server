@@ -4,6 +4,7 @@ import sql from './db.js';
   await sql`DROP TABLE IF EXISTS replays;`;
   await sql`DROP TABLE IF EXISTS users;`;
   await sql`DROP TYPE IF EXISTS REASON;`;
+  await sql`DROP TYPE IF EXISTS GAME_TYPE;`;
 
   await sql`CREATE TYPE REASON AS ENUM (
     'ongoing',
@@ -15,6 +16,8 @@ import sql from './db.js';
     'max time exceeded',
     'server maintenance'
   );`;
+
+  await sql`CREATE TYPE GAME_TYPE AS ENUM ('realtime', 'pausing');`;
 
   await sql`CREATE TABLE users (
     id SERIAL PRIMARY KEY,
@@ -30,6 +33,7 @@ import sql from './db.js';
     game_seed BIGINT NOT NULL,
     screen_seed BIGINT NOT NULL,
     color_selection SMALLINT[] NOT NULL,
+    target_points SMALLINT[] NOT NULL,
     -- Moves are stored as horrible byte balls to save space
     moves INT[] NOT NULL,
     -- ReplayResult fields
@@ -43,6 +47,7 @@ import sql from './db.js';
     site VARCHAR(255) NOT NULL,
     round INT NOT NULL,
     ms_since1970 BIGINT NOT NULL,
+    type GAME_TYPE NOT NULL,
     end_time BIGINT,
     annotator VARCHAR(255),
     time_control VARCHAR(255),

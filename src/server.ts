@@ -1,6 +1,7 @@
 import {ServerWebSocket} from 'bun';
 import {
   ApplicationInfo,
+  DEFAULT_TARGET_POINTS,
   FischerTimer,
   HEIGHT,
   MultiplayerGame,
@@ -189,6 +190,7 @@ class WebSocketGameSession {
       round: 0,
       timeControl: new FischerTimer().toString(),
       msSince1970: new Date().valueOf(),
+      type: 'pausing',
       server: CLIENT_INFO,
       clients: this.players.map(p => p.clientInfo || null),
     };
@@ -197,6 +199,7 @@ class WebSocketGameSession {
         type: 'game params',
         colorSelection: this.colorSelection,
         screenSeed: this.screenSeed,
+        targetPoints: [DEFAULT_TARGET_POINTS, DEFAULT_TARGET_POINTS],
         identity: i,
         metadata,
       });
