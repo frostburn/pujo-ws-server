@@ -45,7 +45,7 @@ type PassingMove = {
 
 type Move = NormalMove | PassingMove;
 
-function clampString(str: string, maxLength = 256) {
+function clampString(str: string, maxLength = 255) {
   return [...str].slice(0, maxLength).join('');
 }
 
@@ -102,10 +102,35 @@ function sanitizeMove(player: number, content: any): Move {
   };
 }
 
+class DatabaseSocket {
+  socket: ServerWebSocket<{socketId: number}>;
+  authorization: string;
+
+  constructor(
+    socket: ServerWebSocket<{socketId: number}>,
+    authorization: string
+  ) {
+    this.socket = socket;
+    this.authorization = authorization;
+  }
+
+  send(message: any) {
+    this.socket.send(JSON.stringify(message));
+  }
+
+  reject(content: any) {
+    if ((content.type as string).startsWith('database:')) {
+      return content.authorization !== this.authorization;
+    }
+    return false;
+  }
+}
+
 class Player {
   socket: ServerWebSocket<{socketId: number}>;
   name: string;
   elo: number;
+  authUuid?: string;
   clientInfo?: ApplicationInfo;
 
   constructor(socket: ServerWebSocket<{socketId: number}>, name: string) {
@@ -149,24 +174,9 @@ class WebSocketGameSession {
 
   disqualifyPlayer(player: number) {
     const reason: ReplayResultReason = 'timeout';
-    const msSince1970 = new Date().valueOf();
-    this.players[player].send({
-      type: 'game result',
-      result: 'loss',
-      reason,
-      msSince1970,
-      verboseReason: 'maximum move time exceeded',
-      gameSeed: this.gameSeed,
-    });
-    this.players[1 - player].send({
-      type: 'game result',
-      result: 'win',
-      reason,
-      msSince1970,
-      verboseReason: 'opponent timeout',
-      gameSeed: this.gameSeed,
-    });
-    this.complete();
+    const winner = 1 - player;
+    this.sendResult(winner, reason);
+    this.complete(winner);
   }
 
   start() {
@@ -210,7 +220,20 @@ class WebSocketGameSession {
     }
   }
 
-  complete() {
+  sendResult(winner: number | undefined, reason: ReplayResultReason) {
+    const msSince1970 = new Date().valueOf();
+    this.players.forEach(p =>
+      p.send({
+        type: 'game result',
+        winner,
+        reason,
+        msSince1970,
+        gameSeed: this.gameSeed,
+      })
+    );
+  }
+
+  complete(winner?: number) {
     if (this.done) {
       return;
     }
@@ -223,27 +246,36 @@ class WebSocketGameSession {
     this.players.forEach(player =>
       sessionBySocketId.delete(player.socket.data.socketId)
     );
+    if (databaseSocket && this.players.length === 2) {
+      databaseSocket.send({
+        type: 'elo update',
+        winner,
+        authUuids: this.players.map(p => p.authUuid),
+      });
+    }
   }
 
   disconnect(player: Player) {
     if (this.done) {
       return;
     }
-    this.players.forEach(opponent => {
+    // XXX: Assumes a duel
+    let winner: number | undefined;
+    this.players.forEach((opponent, i) => {
       if (opponent !== player) {
+        winner = i;
         const reason: ReplayResultReason = 'disconnect';
         const msSince1970 = new Date().valueOf();
         opponent.send({
           type: 'game result',
-          result: 'win',
+          winner,
           reason,
           msSince1970,
-          verboseReason: 'opponent disconnected',
           gameSeed: this.gameSeed,
         });
       }
     });
-    this.complete();
+    this.complete(winner);
   }
 
   message(player: Player, content: any) {
@@ -258,27 +290,12 @@ class WebSocketGameSession {
         state: this.game.toSimpleGame(index),
       });
     } else if (content.type === 'result') {
-      const loser = index;
-      const winner = 1 - loser;
+      const winner = 1 - index;
       const reason: ReplayResultReason = clampString(
         content.reason
       ) as ReplayResultReason;
-      const msSince1970 = new Date().valueOf();
-      this.players[winner].send({
-        type: 'game result',
-        result: 'win',
-        reason,
-        msSince1970,
-        gameSeed: this.gameSeed,
-      });
-      this.players[loser].send({
-        type: 'game result',
-        result: 'loss',
-        reason,
-        msSince1970,
-        gameSeed: this.gameSeed,
-      });
-      this.complete();
+      this.sendResult(winner, reason);
+      this.complete(winner);
     } else if (content.type === 'move') {
       if (!this.waitingForMove[index]) {
         return;
@@ -333,54 +350,19 @@ class WebSocketGameSession {
 
         if (tickResults[0].lockedOut && tickResults[1].lockedOut) {
           const reason: ReplayResultReason = 'double lockout';
-          const msSince1970 = new Date().valueOf();
-          this.players.forEach(p =>
-            p.send({
-              type: 'game result',
-              result: 'draw',
-              reason,
-              msSince1970,
-              verboseReason: 'double lockout',
-              gameSeed: this.gameSeed,
-            })
-          );
-          this.complete();
+          const winner = undefined;
+          this.sendResult(winner, reason);
+          this.complete(winner);
         } else if (tickResults[0].lockedOut || tickResults[1].lockedOut) {
           const winner = tickResults[0].lockedOut ? 1 : 0;
-          const loser = 1 - winner;
           const reason: ReplayResultReason = 'lockout';
-          const msSince1970 = new Date().valueOf();
-          this.players[winner].send({
-            type: 'game result',
-            result: 'win',
-            reason,
-            msSince1970,
-            verboseReason: 'opponent lockout',
-            gameSeed: this.gameSeed,
-          });
-          this.players[loser].send({
-            type: 'game result',
-            result: 'loss',
-            reason,
-            msSince1970,
-            verboseReason: 'lockout',
-            gameSeed: this.gameSeed,
-          });
-          this.complete();
+          this.sendResult(winner, reason);
+          this.complete(winner);
         } else if (this.game.age > MAX_GAME_AGE) {
           const reason: ReplayResultReason = 'max time exceeded';
-          const msSince1970 = new Date().valueOf();
-          this.players.forEach(p =>
-            p.send({
-              type: 'game result',
-              result: 'draw',
-              reason,
-              msSince1970,
-              verboseReason: 'time limit exceeded',
-              gameSeed: this.gameSeed,
-            })
-          );
-          this.complete();
+          const winner = undefined;
+          this.sendResult(winner, reason);
+          this.complete(winner);
         }
       }
 
@@ -418,7 +400,7 @@ const sessionBySocketId: Map<number, WebSocketGameSession> = new Map();
 
 // Bun is still a bit rough around the edges so we spawn a Node process to handle postgres.
 const databaseAuthorization = crypto.randomUUID();
-let databaseSocket: ServerWebSocket<{socketId: number}> | null = null;
+let databaseSocket: DatabaseSocket | null = null;
 
 const server = Bun.serve<{socketId: number}>({
   fetch(req, server) {
@@ -468,7 +450,7 @@ const server = Bun.serve<{socketId: number}>({
       if (content.type === 'database:hello') {
         if (content.authorization === databaseAuthorization) {
           console.log('Database connection established.');
-          databaseSocket = ws;
+          databaseSocket = new DatabaseSocket(ws, databaseAuthorization);
         } else {
           console.error(
             `Fraudulent database connection detected: auth = ${content.authorization} != ${databaseAuthorization}`
@@ -477,10 +459,11 @@ const server = Bun.serve<{socketId: number}>({
         return;
       }
 
-      if (
-        content.type === 'database:user' &&
-        content.authorization === databaseAuthorization
-      ) {
+      if (databaseSocket && databaseSocket.reject(content)) {
+        return;
+      }
+
+      if (content.type === 'database:user') {
         const receiver = playerBySocketId.get(content.socketId);
         if (receiver) {
           receiver.elo = content.payload.elo;
@@ -491,29 +474,26 @@ const server = Bun.serve<{socketId: number}>({
 
       const player = playerBySocketId.get(ws.data.socketId)!;
 
-      if (content.type === 'user request' && databaseSocket) {
-        content.socketId = ws.data.socketId;
-        databaseSocket.send(JSON.stringify(content));
+      if (content.type === 'user') {
+        if (content.username) {
+          player.name = clampString(content.username, 64);
+        }
+        if (content.clientInfo) {
+          player.clientInfo = sanitizeClientInfo(content.clientInfo);
+        }
+        if (content.authUuid) {
+          player.authUuid = content.authUuid;
+        } else {
+          content.authUuid = player.authUuid;
+        }
+        if (databaseSocket) {
+          content.socketId = ws.data.socketId;
+          databaseSocket.send(content);
+        }
         return;
       }
 
       if (content.type === 'game request') {
-        if (content.name !== undefined) {
-          player.name = clampString(content.name, 64);
-        }
-        if (content.clientInfo !== undefined) {
-          player.clientInfo = sanitizeClientInfo(content.clientInfo);
-        }
-        if (content.authUuid !== undefined && databaseSocket) {
-          databaseSocket.send(
-            JSON.stringify({
-              type: 'user request',
-              username: content.name,
-              authUuid: content.authUuid,
-              socketId: ws.data.socketId,
-            })
-          );
-        }
         // Disregard request if already in game
         if (sessionBySocketId.has(ws.data.socketId)) {
           console.log(`Duplicate game request from ${ws.data.socketId}`);
@@ -548,4 +528,5 @@ console.log(`Listening on ${server.hostname}:${server.port}`);
 
 Bun.spawnSync(['node', 'src/db-client.js', databaseAuthorization], {
   stdout: 'inherit',
+  stderr: 'inherit',
 });

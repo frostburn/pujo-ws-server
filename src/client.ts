@@ -24,43 +24,43 @@ args.bot = args.bot || 'flex2';
 const BOTS: Record<
   string,
   {
-    name: string;
+    username: string;
     strategy: typeof nullStrategy | typeof randomStrategy;
     authUuid: string;
   }
 > = {
   null: {
-    name: 'Null (bot)',
+    username: 'Null (bot)',
     strategy: nullStrategy,
     authUuid: process.env.BOT_UUID_NULL || crypto.randomUUID(),
   },
   random: {
-    name: 'Random (bot)',
+    username: 'Random (bot)',
     strategy: randomStrategy,
     authUuid: process.env.BOT_UUID_RANDOM || crypto.randomUUID(),
   },
   flex1: {
-    name: 'FlexDroplet1 (bot)',
+    username: 'FlexDroplet1 (bot)',
     strategy: flexDropletStrategy1,
     authUuid: process.env.BOT_UUID_FLEX1 || crypto.randomUUID(),
   },
   flex2: {
-    name: 'FlexDroplet2 (bot)',
+    username: 'FlexDroplet2 (bot)',
     strategy: flexDropletStrategy2,
     authUuid: process.env.BOT_UUID_FLEX2 || crypto.randomUUID(),
   },
   flex3: {
-    name: 'FlexDroplet3 (bot)',
+    username: 'FlexDroplet3 (bot)',
     strategy: flexDropletStrategy3,
     authUuid: process.env.BOT_UUID_FLEX3 || crypto.randomUUID(),
   },
 };
 
 const bot = BOTS[args.bot].strategy;
-const name = BOTS[args.bot].name;
+const username = BOTS[args.bot].username;
 const authUuid = BOTS[args.bot].authUuid;
 
-console.log(`Runnig ${name}. Connecting to ${args.server}`);
+console.log(`Runnig ${username}. Connecting to ${args.server}`);
 
 const socket = new WebSocket(args.server);
 
@@ -191,20 +191,26 @@ socket.addEventListener('message', event => {
     }
   }
   if (data.type === 'game result') {
-    if (data.result === 'win') {
+    let result = 'Draw';
+    if (data.winner === identity) {
+      result = 'Win';
       wins++;
-    } else if (data.result === 'draw') {
+    } else if (data.winner === undefined) {
       draws++;
     } else {
+      result = 'Loss';
       losses++;
     }
-    console.log(`Game Over: ${data.result}, ${data.reason}`);
+    console.log(`Game Over: ${result}, ${data.reason}`);
     socket.send(
       JSON.stringify({
         type: 'game request',
-        name,
-        authUuid,
-        clientInfo: CLIENT_INFO,
+      })
+    );
+    // Update Elo rating
+    socket.send(
+      JSON.stringify({
+        type: 'user',
       })
     );
   }
@@ -216,12 +222,18 @@ socket.addEventListener('message', event => {
 
 socket.addEventListener('open', () => {
   console.log('Connection established.');
+  // Identify the bot and update Elo rating
+  socket.send(
+    JSON.stringify({
+      type: 'user',
+      username,
+      authUuid,
+      clientInfo: CLIENT_INFO,
+    })
+  );
   socket.send(
     JSON.stringify({
       type: 'game request',
-      name,
-      authUuid,
-      clientInfo: CLIENT_INFO,
     })
   );
 });

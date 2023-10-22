@@ -1,5 +1,6 @@
 import WebSocket from 'ws';
 import sql from './db.js';
+import {updateElos} from './elo.js';
 
 function clampString(str, maxLength = 255) {
   return [...str].slice(0, maxLength).join('');
@@ -35,7 +36,7 @@ ws.on('message', async data => {
   }
   console.log('Content:', content);
 
-  if (content.type === 'user request') {
+  if (content.type === 'user') {
     let rows;
     if (content.username) {
       rows = await sql`UPDATE users SET username = ${clampString(
@@ -63,5 +64,25 @@ ws.on('message', async data => {
         payload,
       })
     );
+  }
+
+  if (content.type === 'elo update') {
+    const elos = [NaN, NaN];
+    for (let i = 0; i < 2; ++i) {
+      const rows =
+        await sql`SELECT * FROM users WHERE auth_uuid = ${content.authUuids[i]};`;
+      elos[i] = rows[0].elo;
+    }
+    const resultA = content.winner === undefined ? 0.5 : 1 - content.winner;
+    const newElos = updateElos(elos[0], elos[1], resultA);
+    for (let i = 0; i < 2; ++i) {
+      const authUuid = content.authUuids[i];
+      let elo = newElos[i];
+      // Make the random bot an anchor.
+      if (authUuid === process.env.BOT_UUID_RANDOM) {
+        elo = 1000;
+      }
+      await sql`UPDATE users SET elo = ${elo} WHERE auth_uuid = ${authUuid};`;
+    }
   }
 });
