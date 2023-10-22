@@ -13,6 +13,12 @@ import {
 import {config} from 'dotenv';
 import argParse from 'minimist';
 import {CLIENT_INFO} from './util';
+import {
+  myFlexDropletStrategy1,
+  myFlexDropletStrategy2,
+  otherFlexDropletStrategy1,
+  otherFlexDropletStrategy2,
+} from './ai';
 
 config();
 
@@ -53,6 +59,26 @@ const BOTS: Record<
     username: 'FlexDroplet3 (bot)',
     strategy: flexDropletStrategy3,
     authUuid: process.env.BOT_UUID_FLEX3 || crypto.randomUUID(),
+  },
+  my: {
+    username: 'MyFlex1 (bot)',
+    strategy: myFlexDropletStrategy1,
+    authUuid: 'cce74a2e-aeac-48a8-9279-eca7a06c30a2',
+  },
+  other: {
+    username: 'OtherFlex1 (bot)',
+    strategy: otherFlexDropletStrategy1,
+    authUuid: '81bea1e4-bc13-468b-a74e-df6ff5ff6c06',
+  },
+  my2: {
+    username: 'MyFlex2 (bot)',
+    strategy: myFlexDropletStrategy2,
+    authUuid: 'c503c125-0b89-4696-9130-0005b806b1b2',
+  },
+  other2: {
+    username: 'OtherFlex2 (bot)',
+    strategy: otherFlexDropletStrategy2,
+    authUuid: '66602a56-172e-47c2-9068-46fd55cdbe78',
   },
 };
 
