@@ -11,7 +11,7 @@ import {
   randomColorSelection,
   randomSeed,
 } from 'pujo-puyo-core';
-import {CLIENT_INFO} from './util';
+import {CLIENT_INFO, MAX_CONSECUTIVE_REROLLS} from './util';
 
 let LOG = false;
 
@@ -359,6 +359,11 @@ class WebSocketGameSession {
         } else if (tickResults[0].lockedOut || tickResults[1].lockedOut) {
           const winner = tickResults[0].lockedOut ? 1 : 0;
           const reason: ReplayResultReason = 'lockout';
+          this.sendResult(winner, reason);
+          this.complete(winner);
+        } else if (this.game.consecutiveRerolls >= MAX_CONSECUTIVE_REROLLS) {
+          const reason: ReplayResultReason = 'impasse';
+          const winner = undefined;
           this.sendResult(winner, reason);
           this.complete(winner);
         } else if (this.game.age > MAX_GAME_AGE) {

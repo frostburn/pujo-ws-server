@@ -13,6 +13,7 @@ import sql from './db.js';
     'disconnect',
     'lockout',
     'double lockout',
+    'impasse',
     'max time exceeded',
     'server maintenance'
   );`;

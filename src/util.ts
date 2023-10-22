@@ -2,6 +2,8 @@ import {ApplicationInfo} from 'pujo-puyo-core';
 import {packages} from '../package-lock.json';
 import {name as appName, version} from '../package.json';
 
+export const MAX_CONSECUTIVE_REROLLS = 20;
+
 const commitHash = Bun.spawnSync(['git', 'rev-parse', '--short', 'HEAD'])
   .stdout.toString()
   .trim();
