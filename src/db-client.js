@@ -47,14 +47,16 @@ ws.on('message', async data => {
         await sql`SELECT * FROM users WHERE auth_uuid = ${content.authUuid};`;
     }
     if (!rows.length) {
-      rows = await sql`INSERT INTO users (username, auth_uuid, elo) VALUES (${
-        content.username || 'Anonymous'
-      }, ${content.authUuid}, 1000) RETURNING *;`;
+      rows =
+        await sql`INSERT INTO users (username, auth_uuid, elo_realtime, elo_pausing) VALUES (${
+          content.username || 'Anonymous'
+        }, ${content.authUuid}, 1000, 1000) RETURNING *;`;
     }
     const payload = {
       type: 'user',
       username: rows[0].username,
-      elo: rows[0].elo,
+      eloRealtime: rows[0].eloRealtime,
+      eloPausing: rows[0].eloPausing,
     };
     ws.send(
       JSON.stringify({
@@ -71,7 +73,10 @@ ws.on('message', async data => {
     for (let i = 0; i < 2; ++i) {
       const rows =
         await sql`SELECT * FROM users WHERE auth_uuid = ${content.authUuids[i]};`;
-      elos[i] = rows[0].elo;
+      elos[i] =
+        content.gameType === 'realtime'
+          ? rows[0].eloRealtime
+          : rows[0].eloPausing;
     }
     const resultA = content.winner === undefined ? 0.5 : 1 - content.winner;
     const newElos = updateElos(elos[0], elos[1], resultA);
@@ -81,8 +86,15 @@ ws.on('message', async data => {
       // Make the random bot an anchor.
       if (authUuid === process.env.BOT_UUID_RANDOM) {
         elo = 1000;
+      } else if (authUuid === process.env.BOT_UUID_FLEX1) {
+        // Based on 15168 wins and 27 losses against random.
+        elo = 2100;
       }
-      await sql`UPDATE users SET elo = ${elo} WHERE auth_uuid = ${authUuid};`;
+      if (content.gameType === 'realtime') {
+        await sql`UPDATE users SET elo_realtime = ${elo} WHERE auth_uuid = ${authUuid};`;
+      } else {
+        await sql`UPDATE users SET elo_pausing = ${elo} WHERE auth_uuid = ${authUuid};`;
+      }
     }
   }
 });

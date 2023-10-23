@@ -216,8 +216,8 @@ socket.addEventListener('message', event => {
     );
   }
   if (data.type === 'user') {
-    console.log(`Setting Elo rating to ${data.elo}`);
-    elo = data.elo;
+    console.log(`Setting Elo rating to ${data.eloPausing}`);
+    elo = data.eloPausing;
   }
 });
 

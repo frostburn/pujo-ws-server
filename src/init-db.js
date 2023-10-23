@@ -24,7 +24,8 @@ import sql from './db.js';
     id SERIAL PRIMARY KEY,
     username VARCHAR(255) NOT NULL,
     auth_uuid UUID NOT NULL UNIQUE,
-    elo REAL NOT NULL
+    elo_realtime REAL NOT NULL,
+    elo_pausing REAL NOT NULL
   );`;
 
   // Reflects the Replay type.

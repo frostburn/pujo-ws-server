@@ -130,14 +130,16 @@ class DatabaseSocket {
 class Player {
   socket: ServerWebSocket<{socketId: number}>;
   name: string;
-  elo: number;
+  eloRealtime: number;
+  eloPausing: number;
   authUuid?: string;
   clientInfo?: ApplicationInfo;
 
   constructor(socket: ServerWebSocket<{socketId: number}>, name: string) {
     this.socket = socket;
     this.name = name;
-    this.elo = 1000;
+    this.eloPausing = 1000;
+    this.eloRealtime = 1000;
   }
 
   send(message: any) {
@@ -252,6 +254,7 @@ class WebSocketGameSession {
     if (databaseSocket && this.players.length === 2) {
       databaseSocket.send({
         type: 'elo update',
+        gameType: 'pausing',
         winner,
         authUuids: this.players.map(p => p.authUuid),
       });
@@ -474,7 +477,8 @@ const server = Bun.serve<{socketId: number}>({
       if (content.type === 'database:user') {
         const receiver = playerBySocketId.get(content.socketId);
         if (receiver) {
-          receiver.elo = content.payload.elo;
+          receiver.eloRealtime = content.payload.eloRealtime;
+          receiver.eloPausing = content.payload.eloPausing;
           receiver.send(content.payload);
         }
         return;
