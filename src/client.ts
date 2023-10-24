@@ -3,7 +3,6 @@ import {
   MOVES,
   MultiplayerGame,
   PASS,
-  SimpleGame,
   flexDropletStrategy1,
   flexDropletStrategy2,
   flexDropletStrategy3,
@@ -13,6 +12,7 @@ import {
 import {config} from 'dotenv';
 import argParse from 'minimist';
 import {CLIENT_INFO} from './util';
+import {ClientMessage, ServerMessage} from './api';
 
 config();
 
@@ -62,7 +62,13 @@ const authUuid = BOTS[args.bot].authUuid;
 
 console.log(`Runnig ${username}. Connecting to ${args.server}`);
 
-const socket = new WebSocket(args.server);
+class ClientSocket extends WebSocket {
+  sendMessage(message: ClientMessage) {
+    return super.send(JSON.stringify(message));
+  }
+}
+
+const socket = new ClientSocket(args.server);
 
 let identity: number | null = null;
 
@@ -77,7 +83,7 @@ let timer: FischerTimer | null = null;
 let elo = 1000;
 
 socket.addEventListener('message', event => {
-  let data: any;
+  let data: ServerMessage;
   if (event.data instanceof Buffer) {
     data = JSON.parse(event.data.toString());
   } else {
@@ -86,23 +92,6 @@ socket.addEventListener('message', event => {
   if (args.verbose) {
     console.log('Message received', data);
   }
-  if (data.type === 'simple state') {
-    console.warn('Unexpected simple state response');
-    const game = SimpleGame.fromJSON(data.state);
-    if (bot === nullStrategy) {
-      prompt('Press enter to play the next move...');
-    }
-    const strategy = bot(game);
-    game.log();
-    console.log('Heuristic score:', strategy.score);
-    console.log(`Wins / Draws / Losses: ${wins} / ${draws} / ${losses}`);
-
-    const response = JSON.parse(JSON.stringify(MOVES[strategy.move]));
-    response.type = 'move';
-    response.hardDrop = true;
-    socket.send(JSON.stringify(response));
-  }
-
   if (data.type === 'game params') {
     mirrorGame = new MultiplayerGame(
       null,
@@ -112,7 +101,11 @@ socket.addEventListener('message', event => {
       data.marginFrames
     );
     identity = data.identity;
-    timer = FischerTimer.fromString(data.metadata.timeControl);
+    if (data.metadata.timeControl) {
+      timer = FischerTimer.fromString(data.metadata.timeControl);
+    } else {
+      timer = null;
+    }
   }
   if (data.type === 'bag') {
     mirrorGame!.games[data.player].bag = data.bag;
@@ -133,27 +126,33 @@ socket.addEventListener('message', event => {
       console.log(
         `Wins / Draws / Losses: ${wins} / ${draws} / ${losses}, (${elo})`
       );
-
-      let response;
-      if (strategy.move === PASS) {
-        response = {pass: true};
-      } else {
-        response = JSON.parse(JSON.stringify(MOVES[strategy.move]));
-      }
-      response.type = 'move';
-      response.hardDrop = true;
       if (timer.end()) {
         console.log('Timeout');
-        socket.send(
-          JSON.stringify({
-            type: 'result',
-            reason: 'timeout',
-          })
-        );
+        socket.sendMessage({
+          type: 'result',
+          reason: 'timeout',
+        });
       } else {
         console.log('Time:', timer.display());
-        response.msRemaining = timer.remaining;
-        socket.send(JSON.stringify(response));
+        const msRemaining = timer.remaining;
+        if (strategy.move === PASS) {
+          socket.sendMessage({
+            type: 'move',
+            pass: true,
+            msRemaining,
+          });
+        } else {
+          const move: (typeof MOVES)[number] = JSON.parse(
+            JSON.stringify(MOVES[strategy.move])
+          );
+          socket.sendMessage({
+            type: 'move',
+            pass: false,
+            hardDrop: true,
+            msRemaining,
+            ...move,
+          });
+        }
       }
     }
   }
@@ -204,17 +203,12 @@ socket.addEventListener('message', event => {
       losses++;
     }
     console.log(`Game Over: ${result}, ${data.reason}`);
-    socket.send(
-      JSON.stringify({
-        type: 'game request',
-      })
-    );
+    socket.sendMessage({
+      type: 'game request',
+      gameType: 'pausing',
+    });
     // Update Elo rating
-    socket.send(
-      JSON.stringify({
-        type: 'user',
-      })
-    );
+    socket.sendMessage({type: 'user'});
   }
   if (data.type === 'user') {
     console.log(`Setting Elo rating to ${data.eloPausing}`);
@@ -225,19 +219,16 @@ socket.addEventListener('message', event => {
 socket.addEventListener('open', () => {
   console.log('Connection established.');
   // Identify the bot and update Elo rating
-  socket.send(
-    JSON.stringify({
-      type: 'user',
-      username,
-      authUuid,
-      clientInfo: CLIENT_INFO,
-    })
-  );
-  socket.send(
-    JSON.stringify({
-      type: 'game request',
-    })
-  );
+  socket.sendMessage({
+    type: 'user',
+    username,
+    authUuid,
+    clientInfo: CLIENT_INFO,
+  });
+  socket.sendMessage({
+    type: 'game request',
+    gameType: 'pausing',
+  });
 });
 
 socket.addEventListener('close', event => {

@@ -4,16 +4,27 @@ import {
   DEFAULT_MARGIN_FRAMES,
   DEFAULT_TARGET_POINTS,
   FischerTimer,
-  HEIGHT,
   MultiplayerGame,
   ReplayMetadata,
   ReplayResultReason,
-  WIDTH,
   randomColorSelection,
   randomSeed,
 } from 'pujo-puyo-core';
-import {CLIENT_INFO, MAX_CONSECUTIVE_REROLLS} from './util';
+import {
+  CLIENT_INFO,
+  MAX_CONSECUTIVE_REROLLS,
+  clampString,
+  sanitizeClientInfo,
+  sanitizeMove,
+} from './util';
 import argParse from 'minimist';
+import {
+  ClientMessage,
+  DatabaseMessage,
+  DatabaseQuery,
+  ServerMessage,
+  ServerMoveMessage,
+} from './api';
 
 const args = argParse(process.argv.slice(2));
 
@@ -22,84 +33,6 @@ const NOMINAL_FRAME_RATE = 30;
 const MAX_GAME_AGE = NOMINAL_FRAME_RATE * 60 * 10;
 // These 10 minutes are measured in wall clock time to prune players who leave their browsers open.
 const MAX_MOVE_TIME = 10 * 60 * 1000;
-
-type NormalMove = {
-  type: 'move';
-  player: number;
-  x1: number;
-  y1: number;
-  x2?: number;
-  y2?: number;
-  orientation?: number;
-  hardDrop: boolean;
-  pass: false;
-  msRemaining: number;
-};
-type PassingMove = {
-  type: 'move';
-  player: number;
-  pass: true;
-  msRemaining: number;
-};
-
-type Move = NormalMove | PassingMove;
-
-function clampString(str: string, maxLength = 255) {
-  return [...str].slice(0, maxLength).join('');
-}
-
-function sanitizeClientInfo(content: any): ApplicationInfo {
-  const result: ApplicationInfo = {
-    name: clampString(content.name),
-    version: clampString(content.version),
-  };
-  if (content.resolved !== undefined) {
-    result.resolved = clampString(content.resolved);
-  }
-  if (content.core !== undefined) {
-    result.core = {
-      version: clampString(content.core.version),
-    };
-    if (content.core.resolved !== undefined) {
-      result.core.resolved = clampString(content.core.resolved);
-    }
-  }
-  return result;
-}
-
-function sanitizeMove(player: number, content: any): Move {
-  if (content.pass) {
-    return {
-      type: 'move',
-      player,
-      pass: true,
-      msRemaining: parseFloat(content.msRemaining),
-    };
-  }
-  if (content.x2 !== undefined) {
-    if (content.y2 === content.y1 - 1) {
-      content.orientation = 0;
-    } else if (content.y2 === content.y1 + 1) {
-      content.orientation = 2;
-    } else if (content.x2 === content.x1 - 1) {
-      content.orientation = 1;
-    } else if (content.x2 === content.x1 + 1) {
-      content.orientation = 3;
-    } else {
-      throw new Error('Unable to sanitize move coordinates');
-    }
-  }
-  return {
-    type: 'move',
-    player,
-    x1: Math.max(0, Math.min(WIDTH - 1, parseInt(content.x1, 10))),
-    y1: Math.max(1, Math.min(HEIGHT - 1, parseInt(content.y1, 10))),
-    orientation: parseInt(content.orientation, 10) & 3,
-    hardDrop: !!content.hardDrop,
-    pass: false,
-    msRemaining: parseFloat(content.msRemaining),
-  };
-}
 
 class DatabaseSocket {
   socket: ServerWebSocket<{socketId: number}>;
@@ -113,12 +46,12 @@ class DatabaseSocket {
     this.authorization = authorization;
   }
 
-  send(message: any) {
+  send(message: DatabaseQuery) {
     this.socket.send(JSON.stringify(message));
   }
 
-  reject(content: any) {
-    if ((content.type as string).startsWith('database:')) {
+  reject(content: ClientMessage | DatabaseMessage) {
+    if (content.type === 'database:hello' || content.type === 'database:user') {
       return content.authorization !== this.authorization;
     }
     return false;
@@ -140,7 +73,7 @@ class Player {
     this.eloRealtime = 1000;
   }
 
-  send(message: any) {
+  send(message: ServerMessage) {
     this.socket.send(JSON.stringify(message));
   }
 }
@@ -153,7 +86,7 @@ class WebSocketGameSession {
   players: Player[];
   waitingForMove: boolean[];
   done: boolean;
-  hiddenMove: Move | null;
+  hiddenMove: ServerMoveMessage | null;
   timeouts: (Timer | null)[];
 
   constructor(player: Player) {
@@ -250,12 +183,16 @@ class WebSocketGameSession {
     this.players.forEach(player =>
       sessionBySocketId.delete(player.socket.data.socketId)
     );
-    if (databaseSocket && this.players.length === 2) {
+    if (
+      databaseSocket &&
+      this.players.length === 2 &&
+      this.players.every(p => p.authUuid)
+    ) {
       databaseSocket.send({
         type: 'elo update',
         gameType: 'pausing',
         winner,
-        authUuids: this.players.map(p => p.authUuid),
+        authUuids: this.players.map(p => p.authUuid!),
       });
     }
   }
@@ -283,7 +220,7 @@ class WebSocketGameSession {
     this.complete(winner);
   }
 
-  message(player: Player, content: any) {
+  message(player: Player, content: ClientMessage) {
     if (this.done) {
       return;
     }
@@ -327,6 +264,7 @@ class WebSocketGameSession {
         }
         this.players[1 - move.player].send({
           type: 'timer',
+          player: move.player,
           msRemaining: move.msRemaining,
         });
         this.players[move.player].send(move);
@@ -450,7 +388,7 @@ const server = Bun.serve<{socketId: number}>({
     async message(ws, message) {
       console.log(`Received ${message} from ${ws.data.socketId}`);
 
-      let content;
+      let content: ClientMessage | DatabaseMessage;
       if (message instanceof Buffer) {
         content = JSON.parse(message.toString());
       } else {
