@@ -36,6 +36,7 @@ import sql from './db.js';
     screen_seed BIGINT NOT NULL,
     color_selection SMALLINT[] NOT NULL,
     target_points SMALLINT[] NOT NULL,
+    margin_frames REAL NOT NULL,
     -- Moves are stored as horrible byte balls to save space
     moves INT[] NOT NULL,
     -- ReplayResult fields

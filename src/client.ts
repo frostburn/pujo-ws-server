@@ -108,7 +108,8 @@ socket.addEventListener('message', event => {
       null,
       data.colorSelection,
       data.screenSeed,
-      data.targetPoints
+      data.targetPoints,
+      data.marginFrames
     );
     identity = data.identity;
     timer = FischerTimer.fromString(data.metadata.timeControl);

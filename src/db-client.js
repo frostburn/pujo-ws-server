@@ -15,7 +15,7 @@ if (!authorization) {
 const ws = new WebSocket('ws://localhost:3003');
 
 ws.on('error', error => {
-  console.error(error);
+  console.error('Websocket error:', error);
 });
 
 ws.on('open', () => {
@@ -26,7 +26,7 @@ ws.on('close', () => {
   console.error('Database client disconnected');
 });
 
-ws.on('message', async data => {
+async function onMessage(data) {
   console.log('Database client received data');
   let content;
   if (data instanceof Buffer) {
@@ -96,5 +96,13 @@ ws.on('message', async data => {
         await sql`UPDATE users SET elo_pausing = ${elo} WHERE auth_uuid = ${authUuid};`;
       }
     }
+  }
+}
+
+ws.on('message', async data => {
+  try {
+    await onMessage(data);
+  } catch (e) {
+    console.error(e);
   }
 });

@@ -1,6 +1,7 @@
 import {ServerWebSocket} from 'bun';
 import {
   ApplicationInfo,
+  DEFAULT_MARGIN_FRAMES,
   DEFAULT_TARGET_POINTS,
   FischerTimer,
   HEIGHT,
@@ -12,12 +13,9 @@ import {
   randomSeed,
 } from 'pujo-puyo-core';
 import {CLIENT_INFO, MAX_CONSECUTIVE_REROLLS} from './util';
+import argParse from 'minimist';
 
-let LOG = false;
-
-if (process.argv.length >= 3) {
-  LOG = true;
-}
+const args = argParse(process.argv.slice(2));
 
 const NOMINAL_FRAME_RATE = 30;
 // Terminate games that last longer than 10 virtual minutes.
@@ -202,6 +200,7 @@ class WebSocketGameSession {
         colorSelection: this.colorSelection,
         screenSeed: this.screenSeed,
         targetPoints: [DEFAULT_TARGET_POINTS, DEFAULT_TARGET_POINTS],
+        marginFrames: DEFAULT_MARGIN_FRAMES,
         identity: i,
         metadata,
       });
@@ -219,7 +218,7 @@ class WebSocketGameSession {
         MAX_MOVE_TIME
       );
     });
-    if (LOG) {
+    if (args.verbose) {
       this.game.log();
       console.log(`Starting game ${this.gameSeed} (${this.screenSeed})`);
     }
@@ -323,7 +322,7 @@ class WebSocketGameSession {
       }
       // Hide the first of simultaneous moves
       if (this.waitingForMove.every(w => w)) {
-        if (LOG) {
+        if (args.verbose) {
           console.log('Hiding move by', move.player);
         }
         this.players[1 - move.player].send({
@@ -333,7 +332,7 @@ class WebSocketGameSession {
         this.players[move.player].send(move);
         this.hiddenMove = move;
       } else if (this.hiddenMove !== null) {
-        if (LOG) {
+        if (args.verbose) {
           console.log('Revealing move by', this.hiddenMove.player);
         }
         this.players[1 - this.hiddenMove.player].send(this.hiddenMove);
@@ -390,7 +389,7 @@ class WebSocketGameSession {
               bag: this.game.games[i].visibleBag,
             })
           );
-          if (LOG) {
+          if (args.verbose) {
             this.game.log();
             console.log('Sent bag of', i, this.game.games[i].visibleBag);
           }
@@ -538,7 +537,12 @@ const server = Bun.serve<{socketId: number}>({
 
 console.log(`Listening on ${server.hostname}:${server.port}`);
 
-Bun.spawnSync(['node', 'src/db-client.js', databaseAuthorization], {
-  stdout: 'inherit',
-  stderr: 'inherit',
-});
+if (args.db === false) {
+  console.log('Please connect the database client manually.');
+  console.log(databaseAuthorization);
+} else {
+  Bun.spawnSync(['node', 'src/db-client.js', databaseAuthorization], {
+    stdout: 'inherit',
+    stderr: 'inherit',
+  });
+}
