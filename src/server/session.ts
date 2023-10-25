@@ -1,82 +1,29 @@
-import {ServerWebSocket} from 'bun';
 import {
-  ApplicationInfo,
   FischerTimer,
   MultiplayerGame,
+  NOMINAL_FRAME_RATE,
   ReplayMetadata,
   ReplayResultReason,
   randomColorSelection,
   randomSeed,
 } from 'pujo-puyo-core';
+import {Player} from './player';
+import {ClientMessage, ServerMoveMessage} from '../api';
 import {
   CLIENT_INFO,
   MAX_CONSECUTIVE_REROLLS,
   clampString,
-  sanitizeClientInfo,
   sanitizeMove,
-} from './util';
-import argParse from 'minimist';
-import {
-  ClientMessage,
-  DatabaseMessage,
-  DatabaseQuery,
-  ServerMessage,
-  ServerMoveMessage,
-} from './api';
+} from '../util';
 
-const args = argParse(process.argv.slice(2));
-
-const NOMINAL_FRAME_RATE = 30;
 // Terminate games that last longer than 10 virtual minutes.
 const MAX_GAME_AGE = NOMINAL_FRAME_RATE * 60 * 10;
 // These 10 minutes are measured in wall clock time to prune players who leave their browsers open.
 const MAX_MOVE_TIME = 10 * 60 * 1000;
 
-class DatabaseSocket {
-  socket: ServerWebSocket<{socketId: number}>;
-  authorization: string;
+export type CompleteCallback = (players: Player[], winner?: number) => void;
 
-  constructor(
-    socket: ServerWebSocket<{socketId: number}>,
-    authorization: string
-  ) {
-    this.socket = socket;
-    this.authorization = authorization;
-  }
-
-  send(message: DatabaseQuery) {
-    this.socket.send(JSON.stringify(message));
-  }
-
-  reject(content: ClientMessage | DatabaseMessage) {
-    if (content.type === 'database:hello' || content.type === 'database:user') {
-      return content.authorization !== this.authorization;
-    }
-    return false;
-  }
-}
-
-class Player {
-  socket: ServerWebSocket<{socketId: number}>;
-  name: string;
-  eloRealtime: number;
-  eloPausing: number;
-  authUuid?: string;
-  clientInfo?: ApplicationInfo;
-
-  constructor(socket: ServerWebSocket<{socketId: number}>, name: string) {
-    this.socket = socket;
-    this.name = name;
-    this.eloPausing = 1000;
-    this.eloRealtime = 1000;
-  }
-
-  send(message: ServerMessage) {
-    this.socket.send(JSON.stringify(message));
-  }
-}
-
-class WebSocketGameSession {
+export class WebSocketPausingSession {
   gameSeed: number;
   screenSeed: number;
   colorSelection: number[];
@@ -87,8 +34,10 @@ class WebSocketGameSession {
   done: boolean;
   hiddenMove: ServerMoveMessage | null;
   timeouts: (Timer | null)[];
+  verbose: boolean;
+  onComplete?: CompleteCallback;
 
-  constructor(player: Player) {
+  constructor(player: Player, verbose?: boolean) {
     this.gameSeed = randomSeed();
     this.screenSeed = randomSeed();
     this.colorSelection = randomColorSelection();
@@ -104,6 +53,7 @@ class WebSocketGameSession {
     this.done = false;
     this.hiddenMove = null;
     this.timeouts = [null, null];
+    this.verbose = !!verbose;
   }
 
   disqualifyPlayer(player: number) {
@@ -153,7 +103,7 @@ class WebSocketGameSession {
         MAX_MOVE_TIME
       );
     });
-    if (args.verbose) {
+    if (this.verbose) {
       this.game.log();
       console.log(`Starting game ${this.gameSeed} (${this.screenSeed})`);
     }
@@ -182,20 +132,8 @@ class WebSocketGameSession {
         clearTimeout(timeout);
       }
     });
-    this.players.forEach(player =>
-      sessionBySocketId.delete(player.socket.data.socketId)
-    );
-    if (
-      databaseSocket &&
-      this.players.length === 2 &&
-      this.players.every(p => p.authUuid)
-    ) {
-      databaseSocket.send({
-        type: 'elo update',
-        gameType: 'pausing',
-        winner,
-        authUuids: this.players.map(p => p.authUuid!),
-      });
+    if (this.onComplete) {
+      this.onComplete(this.players, winner);
     }
   }
 
@@ -245,7 +183,7 @@ class WebSocketGameSession {
         return;
       }
       const move = sanitizeMove(index, this.game.age, content);
-      if (args.verbose) {
+      if (this.verbose) {
         console.log('Sanitized', move);
       }
       clearTimeout(this.timeouts[move.player]!);
@@ -267,7 +205,7 @@ class WebSocketGameSession {
       }
       // Hide the first of simultaneous moves
       if (this.waitingForMove.every(w => w)) {
-        if (args.verbose) {
+        if (this.verbose) {
           console.log('Hiding move by', move.player);
         }
         this.players[1 - move.player].send({
@@ -278,7 +216,7 @@ class WebSocketGameSession {
         this.players[move.player].send(move);
         this.hiddenMove = move;
       } else if (this.hiddenMove !== null) {
-        if (args.verbose) {
+        if (this.verbose) {
           console.log('Revealing move by', this.hiddenMove.player);
         }
         this.players[1 - this.hiddenMove.player].send(this.hiddenMove);
@@ -342,7 +280,7 @@ class WebSocketGameSession {
               piece,
             })
           );
-          if (args.verbose) {
+          if (this.verbose) {
             this.game.log();
             console.log('Sent piece of', i, piece);
           }
@@ -356,146 +294,4 @@ class WebSocketGameSession {
       }
     }
   }
-}
-
-const playerBySocketId: Map<number, Player> = new Map();
-const sessionBySocketId: Map<number, WebSocketGameSession> = new Map();
-
-// Bun is still a bit rough around the edges so we spawn a Node process to handle postgres.
-const databaseAuthorization = crypto.randomUUID();
-let databaseSocket: DatabaseSocket | null = null;
-
-const server = Bun.serve<{socketId: number}>({
-  fetch(req, server) {
-    const success = server.upgrade(req, {
-      data: {
-        socketId: randomSeed(),
-      },
-    });
-    if (success) {
-      // Bun automatically returns a 101 Switching Protocols
-      // if the upgrade succeeds
-      return undefined;
-    }
-
-    // handle HTTP request normally
-    return new Response(
-      'This is a WebSocket server for Pujo Puyo. Please use a compatible client.'
-    );
-  },
-  websocket: {
-    async open(ws) {
-      console.log(`New connection opened by ${ws.data.socketId}.`);
-      const name = `Anonymous${ws.data.socketId.toString().slice(0, 5)}`;
-      playerBySocketId.set(ws.data.socketId, new Player(ws, name));
-    },
-    async close(ws, code, reason) {
-      console.log('Connection closed.', code, reason);
-
-      const player = playerBySocketId.get(ws.data.socketId)!;
-      playerBySocketId.delete(ws.data.socketId);
-      const session = sessionBySocketId.get(ws.data.socketId);
-      if (session !== undefined) {
-        session.disconnect(player);
-      }
-    },
-    // this is called when a message is received
-    async message(ws, message) {
-      console.log(`Received ${message} from ${ws.data.socketId}`);
-
-      let content: ClientMessage | DatabaseMessage;
-      if (message instanceof Buffer) {
-        content = JSON.parse(message.toString());
-      } else {
-        content = JSON.parse(message);
-      }
-
-      if (content.type === 'database:hello') {
-        if (content.authorization === databaseAuthorization) {
-          console.log('Database connection established.');
-          databaseSocket = new DatabaseSocket(ws, databaseAuthorization);
-        } else {
-          console.error(
-            `Fraudulent database connection detected: auth = ${content.authorization} != ${databaseAuthorization}`
-          );
-        }
-        return;
-      }
-
-      if (databaseSocket && databaseSocket.reject(content)) {
-        return;
-      }
-
-      if (content.type === 'database:user') {
-        const receiver = playerBySocketId.get(content.socketId);
-        if (receiver) {
-          receiver.eloRealtime = content.payload.eloRealtime;
-          receiver.eloPausing = content.payload.eloPausing;
-          receiver.send(content.payload);
-        }
-        return;
-      }
-
-      const player = playerBySocketId.get(ws.data.socketId)!;
-
-      if (content.type === 'user') {
-        if (content.username) {
-          player.name = clampString(content.username, 64);
-        }
-        if (content.clientInfo) {
-          player.clientInfo = sanitizeClientInfo(content.clientInfo);
-        }
-        if (content.authUuid) {
-          player.authUuid = content.authUuid;
-        } else {
-          content.authUuid = player.authUuid;
-        }
-        if (databaseSocket) {
-          content.socketId = ws.data.socketId;
-          databaseSocket.send(content);
-        }
-        return;
-      }
-
-      if (content.type === 'game request') {
-        // Disregard request if already in game
-        if (sessionBySocketId.has(ws.data.socketId)) {
-          console.log(`Duplicate game request from ${ws.data.socketId}`);
-          return;
-        }
-        // TODO: Keep an array of open games.
-        for (const session of sessionBySocketId.values()) {
-          if (session.players.length < 2) {
-            session.players.push(player);
-            sessionBySocketId.set(ws.data.socketId, session);
-            session.start();
-            return;
-          }
-        }
-        sessionBySocketId.set(
-          ws.data.socketId,
-          new WebSocketGameSession(player)
-        );
-        return;
-      }
-
-      const session = sessionBySocketId.get(ws.data.socketId);
-      if (session !== undefined) {
-        session.message(player, content);
-      }
-    },
-  },
-  port: 3003,
-});
-
-console.log(`Listening on ${server.hostname}:${server.port}`);
-
-if (args.db === false) {
-  console.log('Please connect the database client manually.');
-  console.log(databaseAuthorization);
-} else {
-  Bun.spawnSync(['node', 'src/db-client.js', databaseAuthorization], {
-    stdout: 'inherit',
-    stderr: 'inherit',
-  });
 }
