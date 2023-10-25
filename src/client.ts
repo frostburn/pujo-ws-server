@@ -109,6 +109,7 @@ socket.addEventListener('message', event => {
     } else {
       timer = null;
     }
+    socket.sendMessage({type: 'ready'});
   }
   if (data.type === 'piece') {
     const player = data.player;
@@ -144,16 +145,14 @@ socket.addEventListener('message', event => {
         const msRemaining = timer.remaining;
         if (strategy.move === PASS) {
           socket.sendMessage({
-            type: 'move',
+            type: 'pausing move',
             pass: true,
             msRemaining,
           });
         } else {
-          const move: (typeof MOVES)[number] = JSON.parse(
-            JSON.stringify(MOVES[strategy.move])
-          );
+          const move = MOVES[strategy.move];
           socket.sendMessage({
-            type: 'move',
+            type: 'pausing move',
             pass: false,
             hardDrop: true,
             msRemaining,
@@ -163,14 +162,13 @@ socket.addEventListener('message', event => {
       }
     }
   }
-  if (data.type === 'move') {
+  if (data.type === 'pausing move') {
     if (!data.pass) {
       const playedMove = mirrorGame!.play(
         data.player,
         data.x1,
         data.y1,
-        data.orientation,
-        data.hardDrop
+        data.orientation
       );
       if (playedMove.time !== data.time) {
         if (args.verbose) {

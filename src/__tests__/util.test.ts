@@ -1,7 +1,7 @@
 import {expect, test} from 'bun:test';
-import {clampString, sanitizeMove} from '../util';
-import {CoordinatedMove, OrientedMove, ServerNormalMove} from '../api';
+import {clampString, sanitizePausingMove} from '../util';
 import {HEIGHT} from 'pujo-puyo-core';
+import {CoordinatedPausingMove, OrientedPausingMove} from '../api';
 
 test('String clamp', () => {
   const message =
@@ -18,25 +18,24 @@ test('String clamp (wide chars)', () => {
 });
 
 test('Move sanitazion (oriented)', () => {
-  const move: OrientedMove = {
-    type: 'move',
+  const move: OrientedPausingMove = {
+    type: 'pausing move',
     x1: -69,
     y1: 420,
-    orientation: 0,
+    orientation: 4,
     hardDrop: true,
     msRemaining: 100,
     pass: false,
   };
-  const sanitized = sanitizeMove(0, 1337, move) as ServerNormalMove;
+  const sanitized = sanitizePausingMove(move) as OrientedPausingMove;
   expect(sanitized.x1).toBe(0);
   expect(sanitized.y1).toBe(HEIGHT - 1);
-  expect(sanitized.x2).toBe(sanitized.x1);
-  expect(sanitized.y2).toBe(sanitized.y1 - 1);
+  expect(sanitized.orientation).toBe(0);
 });
 
 test('Move sanitazion (coordinated)', () => {
-  const move: CoordinatedMove = {
-    type: 'move',
+  const move: CoordinatedPausingMove = {
+    type: 'pausing move',
     x1: 2,
     y1: 2,
     x2: 3,
@@ -46,6 +45,6 @@ test('Move sanitazion (coordinated)', () => {
     msRemaining: 100,
     pass: false,
   };
-  const sanitized = sanitizeMove(1, 0, move) as ServerNormalMove;
+  const sanitized = sanitizePausingMove(move) as OrientedPausingMove;
   expect(sanitized.orientation).toBe(3);
 });
