@@ -66,29 +66,11 @@ type ClientMessage =
   | ResultMessage
   | MoveMessage;
 
-type DatabaseHello = {
-  type: 'database:hello';
-  authorization: string;
-};
-
-type DatabaseUser = {
-  type: 'database:user';
-  socketId: number;
-  authorization: string;
-  payload: {
-    type: 'user';
-    username: string;
-    eloRealtime: number;
-    eloPausing: number;
-  };
-};
-
-type DatabaseMessage = DatabaseHello | DatabaseUser;
-
 // Outgoing (server's perspective)
 
 interface ServerNormalMove extends NormalMove {
   player: number;
+  time: number;
   x2: number;
   y2: number;
   orientation: number;
@@ -106,14 +88,15 @@ type GameParams = {
   screenSeed: Replay['screenSeed'];
   targetPoints: Replay['targetPoints'];
   marginFrames: Replay['marginFrames'];
+  initialBags: number[][];
   identity: number;
   metadata: ReplayMetadata;
 };
 
-type BagMessage = {
-  type: 'bag';
+type PieceMessage = {
+  type: 'piece';
   player: number;
-  bag: number[];
+  piece: number[];
 };
 
 type GameResult = {
@@ -135,14 +118,37 @@ type TimerMessage = {
   msRemaining: number;
 };
 
+type ServerUserMessage = {
+  type: 'user';
+  username: string;
+  eloRealtime: number;
+  eloPausing: number;
+};
+
 type ServerMessage =
   | GameParams
-  | BagMessage
+  | PieceMessage
   | GameResult
   | SimpleState
   | TimerMessage
   | ServerMoveMessage
-  | DatabaseUser['payload'];
+  | ServerUserMessage;
+
+// Database interaction
+
+type DatabaseHello = {
+  type: 'database:hello';
+  authorization: string;
+};
+
+type DatabaseUser = {
+  type: 'database:user';
+  socketId: number;
+  authorization: string;
+  payload: ServerUserMessage;
+};
+
+type DatabaseMessage = DatabaseHello | DatabaseUser;
 
 type EloUpdate = {
   type: 'elo update';

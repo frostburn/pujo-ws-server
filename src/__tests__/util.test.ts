@@ -27,7 +27,7 @@ test('Move sanitazion (oriented)', () => {
     msRemaining: 100,
     pass: false,
   };
-  const sanitized = sanitizeMove(0, move) as ServerNormalMove;
+  const sanitized = sanitizeMove(0, 1337, move) as ServerNormalMove;
   expect(sanitized.x1).toBe(0);
   expect(sanitized.y1).toBe(HEIGHT - 1);
   expect(sanitized.x2).toBe(sanitized.x1);
@@ -46,6 +46,6 @@ test('Move sanitazion (coordinated)', () => {
     msRemaining: 100,
     pass: false,
   };
-  const sanitized = sanitizeMove(1, move) as ServerNormalMove;
+  const sanitized = sanitizeMove(1, 0, move) as ServerNormalMove;
   expect(sanitized.orientation).toBe(3);
 });

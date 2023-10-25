@@ -1,8 +1,6 @@
 import {ServerWebSocket} from 'bun';
 import {
   ApplicationInfo,
-  DEFAULT_MARGIN_FRAMES,
-  DEFAULT_TARGET_POINTS,
   FischerTimer,
   MultiplayerGame,
   ReplayMetadata,
@@ -85,6 +83,7 @@ class WebSocketGameSession {
   game: MultiplayerGame;
   players: Player[];
   waitingForMove: boolean[];
+  passed: boolean[];
   done: boolean;
   hiddenMove: ServerMoveMessage | null;
   timeouts: (Timer | null)[];
@@ -101,6 +100,7 @@ class WebSocketGameSession {
     this.players = [player];
     // TODO: True multiplayer
     this.waitingForMove = [false, false];
+    this.passed = [false, false];
     this.done = false;
     this.hiddenMove = null;
     this.timeouts = [null, null];
@@ -127,21 +127,23 @@ class WebSocketGameSession {
       server: CLIENT_INFO,
       clients: this.players.map(p => p.clientInfo || null),
     };
+    const initialBags = this.game.games.map(g => g.initialBag);
     this.players.forEach((player, i) => {
       player.send({
         type: 'game params',
         colorSelection: this.colorSelection,
         screenSeed: this.screenSeed,
-        targetPoints: [DEFAULT_TARGET_POINTS, DEFAULT_TARGET_POINTS],
-        marginFrames: DEFAULT_MARGIN_FRAMES,
+        targetPoints: this.game.targetPoints,
+        marginFrames: this.game.marginFrames,
+        initialBags,
         identity: i,
         metadata,
       });
       for (let j = 0; j < this.game.games.length; ++j) {
         player.send({
-          type: 'bag',
+          type: 'piece',
           player: j,
-          bag: this.game.games[j].visibleBag,
+          piece: this.game.games[j].nextPiece,
         });
       }
       this.waitingForMove[i] = true;
@@ -242,16 +244,22 @@ class WebSocketGameSession {
       if (!this.waitingForMove[index]) {
         return;
       }
-      const move = sanitizeMove(index, content);
+      const move = sanitizeMove(index, this.game.age, content);
+      if (args.verbose) {
+        console.log('Sanitized', move);
+      }
       clearTimeout(this.timeouts[move.player]!);
-      if (!move.pass) {
+      if (move.pass) {
+        this.passed[move.player] = true;
+      } else {
         const playedMove = this.game.play(
           move.player,
           move.x1,
           move.y1,
-          move.orientation!,
+          move.orientation,
           move.hardDrop
         );
+        move.time = playedMove.time;
         move.x1 = playedMove.x1;
         move.y1 = playedMove.y1;
         move.x2 = playedMove.x2;
@@ -320,16 +328,23 @@ class WebSocketGameSession {
 
       for (let i = 0; i < this.players.length; ++i) {
         if (!this.game.games[i].busy && !this.waitingForMove[i]) {
+          let piece: number[];
+          if (this.passed[i]) {
+            piece = [];
+            this.passed[i] = false;
+          } else {
+            piece = this.game.games[i].nextPiece;
+          }
           this.players.forEach(p =>
             p.send({
-              type: 'bag',
+              type: 'piece',
               player: i,
-              bag: this.game.games[i].visibleBag,
+              piece,
             })
           );
           if (args.verbose) {
             this.game.log();
-            console.log('Sent bag of', i, this.game.games[i].visibleBag);
+            console.log('Sent piece of', i, piece);
           }
           this.waitingForMove[i] = true;
           const latePlayer = i;

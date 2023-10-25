@@ -23,6 +23,7 @@ export const CLIENT_INFO: ApplicationInfo = {
 
 export function sanitizeMove(
   player: number,
+  time: number,
   content: MoveMessage
 ): ServerMoveMessage {
   if (content.pass) {
@@ -36,6 +37,7 @@ export function sanitizeMove(
   const result: ServerNormalMove = {
     type: 'move',
     player,
+    time,
     x1: Math.max(
       0,
       Math.min(WIDTH - 1, parseInt(content.x1 as unknown as string, 10))

@@ -100,6 +100,9 @@ socket.addEventListener('message', event => {
       data.targetPoints,
       data.marginFrames
     );
+    for (let i = 0; i < data.initialBags.length; ++i) {
+      mirrorGame.games[i].bag = data.initialBags[i];
+    }
     identity = data.identity;
     if (data.metadata.timeControl) {
       timer = FischerTimer.fromString(data.metadata.timeControl);
@@ -107,10 +110,14 @@ socket.addEventListener('message', event => {
       timer = null;
     }
   }
-  if (data.type === 'bag') {
-    mirrorGame!.games[data.player].bag = data.bag;
+  if (data.type === 'piece') {
+    const player = data.player;
+    data.piece.forEach(color => mirrorGame!.games[player].bag.push(color));
+    if (args.verbose) {
+      console.log('Bag of', player, mirrorGame!.games[player].bag);
+    }
 
-    if (data.player === identity) {
+    if (player === identity) {
       if (!timer) {
         throw new Error('Move requested, but timer not initialized');
       }
@@ -158,13 +165,20 @@ socket.addEventListener('message', event => {
   }
   if (data.type === 'move') {
     if (!data.pass) {
-      mirrorGame!.play(
+      const playedMove = mirrorGame!.play(
         data.player,
         data.x1,
         data.y1,
         data.orientation,
         data.hardDrop
       );
+      if (playedMove.time !== data.time) {
+        if (args.verbose) {
+          mirrorGame!.log();
+        }
+        socket.close();
+        throw new Error(`Game desync: ${playedMove.time} != ${data.time}`);
+      }
     }
     while (
       mirrorGame!.games.every(game => game.busy) ||
