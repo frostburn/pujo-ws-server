@@ -1,16 +1,24 @@
-import {randomSeed} from 'pujo-puyo-core';
+import {NOMINAL_FRAME_RATE, randomSeed} from 'pujo-puyo-core';
 import {clampString, sanitizeClientInfo} from '../util';
 import argParse from 'minimist';
 import {ClientMessage, DatabaseMessage} from '../api';
 import {Player} from './player';
-import {WebSocketPausingSession} from './session';
+import {
+  WebSocketPausingSession,
+  WebSocketRealtimeSession,
+  WebSocketSession,
+} from './session';
 import {DatabaseSocket} from './database-socket';
 
 const args = argParse(process.argv.slice(2));
 
-function onComplete(players: Player[], winner?: number) {
+function onPausingComplete(
+  session: WebSocketSession,
+  players: Player[],
+  winner?: number
+) {
   players.forEach(player =>
-    sessionBySocketId.delete(player.socket.data.socketId)
+    pausingSessionBySocketId.delete(player.socket.data.socketId)
   );
   if (
     databaseSocket &&
@@ -26,12 +34,67 @@ function onComplete(players: Player[], winner?: number) {
   }
 }
 
+function onRealtimeComplete(
+  session: WebSocketSession,
+  players: Player[],
+  winner?: number
+) {
+  if (activeRealtimeSessions.includes(session as WebSocketRealtimeSession)) {
+    activeRealtimeSessions.splice(
+      activeRealtimeSessions.indexOf(session as WebSocketRealtimeSession),
+      1
+    );
+  }
+  players.forEach(player =>
+    realtimeSessionBySocketId.delete(player.socket.data.socketId)
+  );
+  if (
+    databaseSocket &&
+    players.length === 2 &&
+    players.every(p => p.authUuid)
+  ) {
+    databaseSocket.send({
+      type: 'elo update',
+      gameType: 'realtime',
+      winner,
+      authUuids: players.map(p => p.authUuid!),
+    });
+  }
+}
+
 const playerBySocketId: Map<number, Player> = new Map();
-const sessionBySocketId: Map<number, WebSocketPausingSession> = new Map();
+const pausingSessionBySocketId: Map<number, WebSocketPausingSession> =
+  new Map();
+const realtimeSessionBySocketId: Map<number, WebSocketRealtimeSession> =
+  new Map();
+const activeRealtimeSessions: WebSocketRealtimeSession[] = [];
 
 // Bun is still a bit rough around the edges so we spawn a Node process to handle postgres.
 const databaseAuthorization = crypto.randomUUID();
 let databaseSocket: DatabaseSocket | null = null;
+
+let numTicks = 0;
+let tickStart: number | null = null;
+// This loop should probably run in a worker/child process if the cloud server ever upgrades.
+// On a single core machine this is better.
+function tick() {
+  if (tickStart === null) {
+    tickStart = performance.now();
+  }
+  for (const session of activeRealtimeSessions) {
+    if (args.debug) {
+      console.log('Tick of', session.gameSeed, ':', session.age);
+    }
+    session.tick();
+  }
+  numTicks++;
+  const nextTickTime = tickStart + (1000 / NOMINAL_FRAME_RATE) * numTicks;
+  const deltaTime = nextTickTime - performance.now();
+  tickId = setTimeout(tick, deltaTime);
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+let tickId: Timer = setTimeout(tick, 1);
 
 const server = Bun.serve<{socketId: number}>({
   fetch(req, server) {
@@ -55,14 +118,20 @@ const server = Bun.serve<{socketId: number}>({
     async open(ws) {
       console.log(`New connection opened by ${ws.data.socketId}.`);
       const name = `Anonymous${ws.data.socketId.toString().slice(0, 5)}`;
-      playerBySocketId.set(ws.data.socketId, new Player(ws, name));
+      playerBySocketId.set(ws.data.socketId, new Player(ws, name, args.debug));
     },
     async close(ws, code, reason) {
       console.log('Connection closed.', code, reason);
 
       const player = playerBySocketId.get(ws.data.socketId)!;
       playerBySocketId.delete(ws.data.socketId);
-      const session = sessionBySocketId.get(ws.data.socketId);
+      {
+        const session = pausingSessionBySocketId.get(ws.data.socketId);
+        if (session !== undefined) {
+          session.disconnect(player);
+        }
+      }
+      const session = realtimeSessionBySocketId.get(ws.data.socketId);
       if (session !== undefined) {
         session.disconnect(player);
       }
@@ -127,28 +196,54 @@ const server = Bun.serve<{socketId: number}>({
 
       if (content.type === 'game request') {
         // Disregard request if already in game
-        if (sessionBySocketId.has(ws.data.socketId)) {
+        // Note that this only applies per socket. One user may play multiple games.
+        if (
+          pausingSessionBySocketId.has(ws.data.socketId) ||
+          realtimeSessionBySocketId.has(ws.data.socketId)
+        ) {
           console.log(`Duplicate game request from ${ws.data.socketId}`);
           return;
         }
         // TODO: Keep an array of open games.
-        for (const session of sessionBySocketId.values()) {
-          if (session.players.length < 2) {
-            session.players.push(player);
-            sessionBySocketId.set(ws.data.socketId, session);
-            session.start();
-            return;
+        if (content.gameType === 'pausing') {
+          for (const session of pausingSessionBySocketId.values()) {
+            if (session.players.length < 2) {
+              session.players.push(player);
+              pausingSessionBySocketId.set(ws.data.socketId, session);
+              session.start();
+              return;
+            }
           }
+          const session = new WebSocketPausingSession(player, args.verbose);
+          session.onComplete = onPausingComplete;
+          pausingSessionBySocketId.set(ws.data.socketId, session);
+          return;
+        } else {
+          for (const session of realtimeSessionBySocketId.values()) {
+            if (session.players.length < 2) {
+              session.players.push(player);
+              realtimeSessionBySocketId.set(ws.data.socketId, session);
+              session.start();
+              activeRealtimeSessions.push(session);
+              return;
+            }
+          }
+          const session = new WebSocketRealtimeSession(player, args.verbose);
+          session.onComplete = onRealtimeComplete;
+          realtimeSessionBySocketId.set(ws.data.socketId, session);
+          return;
         }
-        const session = new WebSocketPausingSession(player, args.verbose);
-        session.onComplete = onComplete;
-        sessionBySocketId.set(ws.data.socketId, session);
-        return;
       }
 
-      const session = sessionBySocketId.get(ws.data.socketId);
+      {
+        const session = pausingSessionBySocketId.get(ws.data.socketId);
+        if (session !== undefined) {
+          session.onMessage(player, content);
+        }
+      }
+      const session = realtimeSessionBySocketId.get(ws.data.socketId);
       if (session !== undefined) {
-        session.message(player, content);
+        session.onMessage(player, content);
       }
     },
   },

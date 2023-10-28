@@ -1,15 +1,17 @@
 import {
   type Replay,
   type ApplicationInfo,
+  type RevealedPiece,
   ReplayMetadata,
   ReplayResult,
   SimpleGame,
+  PlayedMove,
 } from 'pujo-puyo-core';
 
 type GameType = Replay['metadata']['type'];
 
-type NormalMove = {
-  type: 'move';
+type PausingMoveBase = {
+  type: 'pausing move';
   x1: number;
   y1: number;
   hardDrop: boolean;
@@ -17,23 +19,43 @@ type NormalMove = {
   msRemaining: number;
 };
 
-interface OrientedMove extends NormalMove {
+interface OrientedPausingMove extends PausingMoveBase {
   orientation: number;
 }
 
-interface CoordinatedMove extends NormalMove {
+interface CoordinatedPausingMove extends PausingMoveBase {
   orientation: undefined;
   x2: number;
   y2: number;
 }
 
 type PassingMove = {
-  type: 'move';
+  type: 'pausing move';
   pass: true;
   msRemaining: number;
 };
 
-type MoveMessage = OrientedMove | CoordinatedMove | PassingMove;
+type PausingMove = OrientedPausingMove | CoordinatedPausingMove | PassingMove;
+
+interface RealtimeMoveBase {
+  type: 'realtime move';
+  x1: number;
+  y1: number;
+  hardDrop: boolean;
+  time?: number;
+}
+
+interface OrientedRealtimeMove extends RealtimeMoveBase {
+  orientation: number;
+}
+
+interface CoordinatedRealtimeMove extends RealtimeMoveBase {
+  orientation: undefined;
+  x2: number;
+  y2: number;
+}
+
+type RealtimeMove = OrientedRealtimeMove | CoordinatedRealtimeMove;
 
 // Incoming (server's perspective)
 
@@ -59,28 +81,36 @@ type ResultMessage = {
   reason: 'resignation' | 'timeout';
 };
 
+type ReadyMessage = {
+  type: 'ready';
+};
+
 type ClientMessage =
   | GameRequest
   | UserMessage
   | SimpleStateRequest
   | ResultMessage
-  | MoveMessage;
+  | ReadyMessage
+  | PausingMove
+  | RealtimeMove;
 
 // Outgoing (server's perspective)
 
-interface ServerNormalMove extends NormalMove {
-  player: number;
-  time: number;
-  x2: number;
-  y2: number;
-  orientation: number;
+interface ServerPausingNormalMove extends PlayedMove {
+  type: 'pausing move';
+  pass: false;
+  msRemaining: number;
 }
 
 interface ServerPassingMove extends PassingMove {
   player: number;
 }
 
-type ServerMoveMessage = ServerNormalMove | ServerPassingMove;
+type ServerPausingMove = ServerPausingNormalMove | ServerPassingMove;
+
+interface ServerRealtimeMove extends PlayedMove {
+  type: 'realtime move';
+}
 
 type GameParams = {
   type: 'game params';
@@ -93,10 +123,14 @@ type GameParams = {
   metadata: ReplayMetadata;
 };
 
-type PieceMessage = {
+interface PieceMessage extends RevealedPiece {
   type: 'piece';
-  player: number;
-  piece: number[];
+}
+
+type Retcon = {
+  type: 'retcon';
+  time: number;
+  rejectedMoves: PlayedMove[];
 };
 
 type GameResult = {
@@ -125,14 +159,21 @@ type ServerUserMessage = {
   eloPausing: number;
 };
 
+type GoMessage = {
+  type: 'go';
+};
+
 type ServerMessage =
   | GameParams
   | PieceMessage
+  | Retcon
   | GameResult
   | SimpleState
   | TimerMessage
-  | ServerMoveMessage
-  | ServerUserMessage;
+  | ServerPausingMove
+  | ServerRealtimeMove
+  | ServerUserMessage
+  | GoMessage;
 
 // Database interaction
 
