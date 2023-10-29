@@ -377,7 +377,7 @@ export class WebSocketPausingSession extends WebSocketSession {
 }
 
 export class WebSocketRealtimeSession extends WebSocketSession {
-  game: TimeWarpingGame;
+  game: TimeWarpingGame<MultiplayerGame>;
   age: number;
 
   constructor(player: Player, verbose?: boolean) {

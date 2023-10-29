@@ -75,7 +75,7 @@ let passing = false;
 
 let identity: number | null = null;
 
-let mirrorGame: TimeWarpingMirror | null = null;
+let mirrorGame: TimeWarpingMirror<MultiplayerGame> | null = null;
 
 let wins = 0;
 let draws = 0;
@@ -112,7 +112,7 @@ socket.addEventListener('message', event => {
 
     if (data.player === identity) {
       const startTime = performance.now();
-      const multiplayerGame = mirrorGame!.warp(data.time);
+      const multiplayerGame = mirrorGame!.warp(data.time)[0];
       if (!multiplayerGame) {
         console.log('Mirror in an inconsistent state. Refusing to play.');
         socket.sendMessage({type: 'result', reason: 'resignation'});
@@ -152,7 +152,7 @@ socket.addEventListener('message', event => {
   if (data.type === 'realtime move') {
     mirrorGame!.addMove(data);
     if (passing && data.player !== identity) {
-      const multiplayerGame = mirrorGame!.warp(data.time);
+      const multiplayerGame = mirrorGame!.warp(data.time)[0];
       if (!multiplayerGame) {
         console.log('Mirror in an inconsistent state. Refusing to play.');
         socket.sendMessage({type: 'result', reason: 'resignation'});
