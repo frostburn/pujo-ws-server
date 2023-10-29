@@ -37,6 +37,9 @@ const MAX_LAG = 15;
 // 100ms measured in frames
 const MAX_ADVANTAGE = 3;
 
+const CHECKPOINT_INTERVAL = 5;
+const MAX_CHECKPOINTS = 10;
+
 export type CompleteCallback = (
   session: WebSocketSession,
   players: Player[],
@@ -46,7 +49,7 @@ export type CompleteCallback = (
 export class WebSocketSession {
   gameSeed: number;
   screenSeed: number;
-  colorSelection: number[];
+  colorSelections: number[][];
   players: Player[];
   ready: boolean[];
   waitingForMove: boolean[];
@@ -58,7 +61,8 @@ export class WebSocketSession {
   constructor(player: Player, verbose?: boolean) {
     this.gameSeed = randomSeed();
     this.screenSeed = randomSeed();
-    this.colorSelection = randomColorSelection();
+    const colorSelection = randomColorSelection();
+    this.colorSelections = [colorSelection, colorSelection];
     this.players = [player];
     // TODO: True multiplayer
     this.ready = [false, false];
@@ -74,10 +78,11 @@ export class WebSocketSession {
       this.ready[i] = false;
       player.send({
         type: 'game params',
-        colorSelection: this.colorSelection,
+        colorSelections: this.colorSelections,
         screenSeed: this.screenSeed,
         targetPoints: origin.targetPoints,
         marginFrames: origin.marginFrames,
+        mercyFrames: origin.mercyFrames,
         initialBags,
         identity: i,
         metadata,
@@ -223,7 +228,9 @@ export class WebSocketSession {
       const reason: ReplayResultReason = 'lockout';
       this.sendResult(winner, reason);
       this.complete(winner);
-    } else if (game.consecutiveRerolls >= MAX_CONSECUTIVE_REROLLS) {
+    } else if (
+      game.games.every(g => g.consecutiveRerolls >= MAX_CONSECUTIVE_REROLLS)
+    ) {
       const reason: ReplayResultReason = 'impasse';
       const winner = undefined;
       this.sendResult(winner, reason);
@@ -246,8 +253,8 @@ export class WebSocketPausingSession extends WebSocketSession {
     super(player, verbose);
     this.game = new MultiplayerGame(
       this.gameSeed,
-      this.colorSelection,
-      this.screenSeed
+      this.screenSeed,
+      this.colorSelections
     );
     this.passed = [false, false];
     this.hiddenMove = null;
@@ -384,10 +391,14 @@ export class WebSocketRealtimeSession extends WebSocketSession {
     super(player, verbose);
     const origin = new MultiplayerGame(
       this.gameSeed,
-      this.colorSelection,
-      this.screenSeed
+      this.screenSeed,
+      this.colorSelections
     );
-    this.game = new TimeWarpingGame(origin);
+    this.game = new TimeWarpingGame(
+      origin,
+      CHECKPOINT_INTERVAL,
+      MAX_CHECKPOINTS
+    );
     this.age = 0;
   }
 

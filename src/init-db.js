@@ -10,6 +10,8 @@ import sql from './db.js';
     'ongoing',
     'resignation',
     'timeout',
+    'lagging',
+    'advancing',
     'disconnect',
     'lockout',
     'double lockout',
@@ -34,9 +36,10 @@ import sql from './db.js';
     -- Main fields
     game_seed BIGINT NOT NULL,
     screen_seed BIGINT NOT NULL,
-    color_selection SMALLINT[] NOT NULL,
+    color_selections SMALLINT[][] NOT NULL,
     target_points SMALLINT[] NOT NULL,
     margin_frames REAL NOT NULL,
+    mercy_frames REAL NOT NULL,
     -- Moves are stored as horrible byte balls to save space
     moves INT[] NOT NULL,
     -- ReplayResult fields

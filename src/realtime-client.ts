@@ -98,8 +98,8 @@ socket.addEventListener('message', event => {
   if (data.type === 'game params') {
     const origin = new MultiplayerGame(
       null,
-      data.colorSelection,
       data.screenSeed,
+      data.colorSelections,
       data.targetPoints,
       data.marginFrames
     );
