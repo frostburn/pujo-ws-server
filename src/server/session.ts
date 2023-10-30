@@ -12,6 +12,7 @@ import {Player} from './player';
 import {
   ClientMessage,
   GameResult,
+  GameType,
   PausingMove,
   PieceMessage,
   RealtimeMove,
@@ -47,6 +48,8 @@ export type CompleteCallback = (
 ) => void;
 
 export class WebSocketSession {
+  type: GameType | undefined = undefined;
+
   gameSeed: number;
   screenSeed: number;
   colorSelections: number[][];
@@ -245,6 +248,8 @@ export class WebSocketSession {
 }
 
 export class WebSocketPausingSession extends WebSocketSession {
+  type = 'pausing' as const;
+
   game: MultiplayerGame;
   passed: boolean[];
   hiddenMove: ServerPausingMove | null;
@@ -384,6 +389,8 @@ export class WebSocketPausingSession extends WebSocketSession {
 }
 
 export class WebSocketRealtimeSession extends WebSocketSession {
+  type = 'realtime' as const;
+
   game: TimeWarpingGame<MultiplayerGame>;
   age: number;
 

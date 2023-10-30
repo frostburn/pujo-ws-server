@@ -67,6 +67,7 @@ type GameRequest = {
 type UserMessage = {
   type: 'user';
   username?: string;
+  isBot?: boolean;
   clientInfo?: ApplicationInfo;
   authUuid?: string;
   socketId?: number;

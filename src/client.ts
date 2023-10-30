@@ -235,6 +235,7 @@ socket.addEventListener('open', () => {
     type: 'user',
     username,
     authUuid,
+    isBot: true,
     clientInfo: CLIENT_INFO,
   });
   socket.sendMessage({

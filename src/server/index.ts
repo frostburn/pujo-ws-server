@@ -10,7 +10,19 @@ import {
 } from './session';
 import {DatabaseSocket} from './database-socket';
 
+// Command line arguments
 const args = argParse(process.argv.slice(2));
+
+// State
+const playerBySocketId: Map<number, Player> = new Map();
+const sessionBySocketId: Map<
+  number,
+  WebSocketPausingSession | WebSocketRealtimeSession
+> = new Map();
+
+// Bun is still a bit rough around the edges so we spawn a Node process to handle postgres.
+const databaseAuthorization = crypto.randomUUID();
+let databaseSocket: DatabaseSocket | null = null;
 
 function onPausingComplete(
   session: WebSocketSession,
@@ -18,7 +30,7 @@ function onPausingComplete(
   winner?: number
 ) {
   players.forEach(player =>
-    pausingSessionBySocketId.delete(player.socket.data.socketId)
+    sessionBySocketId.delete(player.socket.data.socketId)
   );
   if (
     databaseSocket &&
@@ -46,7 +58,7 @@ function onRealtimeComplete(
     );
   }
   players.forEach(player =>
-    realtimeSessionBySocketId.delete(player.socket.data.socketId)
+    sessionBySocketId.delete(player.socket.data.socketId)
   );
   if (
     databaseSocket &&
@@ -62,21 +74,11 @@ function onRealtimeComplete(
   }
 }
 
-const playerBySocketId: Map<number, Player> = new Map();
-const pausingSessionBySocketId: Map<number, WebSocketPausingSession> =
-  new Map();
-const realtimeSessionBySocketId: Map<number, WebSocketRealtimeSession> =
-  new Map();
-const activeRealtimeSessions: WebSocketRealtimeSession[] = [];
-
-// Bun is still a bit rough around the edges so we spawn a Node process to handle postgres.
-const databaseAuthorization = crypto.randomUUID();
-let databaseSocket: DatabaseSocket | null = null;
-
-let numTicks = 0;
-let tickStart: number | null = null;
 // This loop should probably run in a worker/child process if the cloud server ever upgrades.
 // On a single core machine this is better.
+const activeRealtimeSessions: WebSocketRealtimeSession[] = [];
+let numTicks = 0;
+let tickStart: number | null = null;
 function tick() {
   if (tickStart === null) {
     tickStart = performance.now();
@@ -125,13 +127,7 @@ const server = Bun.serve<{socketId: number}>({
 
       const player = playerBySocketId.get(ws.data.socketId)!;
       playerBySocketId.delete(ws.data.socketId);
-      {
-        const session = pausingSessionBySocketId.get(ws.data.socketId);
-        if (session !== undefined) {
-          session.disconnect(player);
-        }
-      }
-      const session = realtimeSessionBySocketId.get(ws.data.socketId);
+      const session = sessionBySocketId.get(ws.data.socketId);
       if (session !== undefined) {
         session.disconnect(player);
       }
@@ -182,6 +178,9 @@ const server = Bun.serve<{socketId: number}>({
         if (content.clientInfo) {
           player.clientInfo = sanitizeClientInfo(content.clientInfo);
         }
+        if (content.isBot !== undefined) {
+          player.isBot = !!content.isBot;
+        }
         if (content.authUuid) {
           player.authUuid = content.authUuid;
         } else {
@@ -197,32 +196,29 @@ const server = Bun.serve<{socketId: number}>({
       if (content.type === 'game request') {
         // Disregard request if already in game
         // Note that this only applies per socket. One user may play multiple games.
-        if (
-          pausingSessionBySocketId.has(ws.data.socketId) ||
-          realtimeSessionBySocketId.has(ws.data.socketId)
-        ) {
+        if (sessionBySocketId.has(ws.data.socketId)) {
           console.log(`Duplicate game request from ${ws.data.socketId}`);
           return;
         }
         // TODO: Keep an array of open games.
         if (content.gameType === 'pausing') {
-          for (const session of pausingSessionBySocketId.values()) {
-            if (session.players.length < 2) {
+          for (const session of sessionBySocketId.values()) {
+            if (session.type === 'pausing' && session.players.length < 2) {
               session.players.push(player);
-              pausingSessionBySocketId.set(ws.data.socketId, session);
+              sessionBySocketId.set(ws.data.socketId, session);
               session.start();
               return;
             }
           }
           const session = new WebSocketPausingSession(player, args.verbose);
           session.onComplete = onPausingComplete;
-          pausingSessionBySocketId.set(ws.data.socketId, session);
+          sessionBySocketId.set(ws.data.socketId, session);
           return;
         } else {
-          for (const session of realtimeSessionBySocketId.values()) {
-            if (session.players.length < 2) {
+          for (const session of sessionBySocketId.values()) {
+            if (session.type === 'realtime' && session.players.length < 2) {
               session.players.push(player);
-              realtimeSessionBySocketId.set(ws.data.socketId, session);
+              sessionBySocketId.set(ws.data.socketId, session);
               session.start();
               activeRealtimeSessions.push(session);
               return;
@@ -230,18 +226,12 @@ const server = Bun.serve<{socketId: number}>({
           }
           const session = new WebSocketRealtimeSession(player, args.verbose);
           session.onComplete = onRealtimeComplete;
-          realtimeSessionBySocketId.set(ws.data.socketId, session);
+          sessionBySocketId.set(ws.data.socketId, session);
           return;
         }
       }
 
-      {
-        const session = pausingSessionBySocketId.get(ws.data.socketId);
-        if (session !== undefined) {
-          session.onMessage(player, content);
-        }
-      }
-      const session = realtimeSessionBySocketId.get(ws.data.socketId);
+      const session = sessionBySocketId.get(ws.data.socketId);
       if (session !== undefined) {
         session.onMessage(player, content);
       }
