@@ -1,24 +1,25 @@
 import {NOMINAL_FRAME_RATE, randomSeed} from 'pujo-puyo-core';
-import {clampString, sanitizeClientInfo} from '../util';
+import {clampString, sanitizeChallenge, sanitizeClientInfo} from '../util';
 import argParse from 'minimist';
-import {ClientMessage, DatabaseMessage} from '../api';
+import {Challenge, ClientMessage, DatabaseMessage} from '../api';
 import {Player} from './player';
-import {
-  WebSocketPausingSession,
-  WebSocketRealtimeSession,
-  WebSocketSession,
-} from './session';
+import {PausingSession, RealtimeSession, WebSocketSession} from './session';
 import {DatabaseSocket} from './database-socket';
 
 // Command line arguments
 const args = argParse(process.argv.slice(2));
 
+// Types
+interface OpenChallenge extends Challenge {
+  player: Player;
+  password?: string;
+}
+
 // State
 const playerBySocketId: Map<number, Player> = new Map();
-const sessionBySocketId: Map<
-  number,
-  WebSocketPausingSession | WebSocketRealtimeSession
-> = new Map();
+const challenges: Set<OpenChallenge> = new Set();
+const sessionBySocketId: Map<number, PausingSession | RealtimeSession> =
+  new Map();
 
 // Bun is still a bit rough around the edges so we spawn a Node process to handle postgres.
 const databaseAuthorization = crypto.randomUUID();
@@ -51,9 +52,9 @@ function onRealtimeComplete(
   players: Player[],
   winner?: number
 ) {
-  if (activeRealtimeSessions.includes(session as WebSocketRealtimeSession)) {
+  if (activeRealtimeSessions.includes(session as RealtimeSession)) {
     activeRealtimeSessions.splice(
-      activeRealtimeSessions.indexOf(session as WebSocketRealtimeSession),
+      activeRealtimeSessions.indexOf(session as RealtimeSession),
       1
     );
   }
@@ -76,7 +77,7 @@ function onRealtimeComplete(
 
 // This loop should probably run in a worker/child process if the cloud server ever upgrades.
 // On a single core machine this is better.
-const activeRealtimeSessions: WebSocketRealtimeSession[] = [];
+const activeRealtimeSessions: RealtimeSession[] = [];
 let numTicks = 0;
 let tickStart: number | null = null;
 function tick() {
@@ -97,6 +98,22 @@ function tick() {
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 let tickId: Timer = setTimeout(tick, 1);
+
+function startSession(challenge: OpenChallenge, challenger: Player) {
+  const players = [challenge.player, challenger];
+  let session: PausingSession | RealtimeSession;
+  if (challenge.gameType === 'pausing') {
+    session = new PausingSession(players, args.verbose);
+    session.onComplete = onPausingComplete;
+  } else {
+    session = new RealtimeSession(players, args.verbose);
+    session.onComplete = onRealtimeComplete;
+    activeRealtimeSessions.push(session);
+  }
+  players.forEach(p => sessionBySocketId.set(p.socket.data.socketId, session));
+  session.start();
+  challenges.delete(challenge);
+}
 
 const server = Bun.serve<{socketId: number}>({
   fetch(req, server) {
@@ -182,7 +199,7 @@ const server = Bun.serve<{socketId: number}>({
           player.isBot = !!content.isBot;
         }
         if (content.authUuid) {
-          player.authUuid = content.authUuid;
+          player.authUuid = clampString(content.authUuid);
         } else {
           content.authUuid = player.authUuid;
         }
@@ -200,35 +217,81 @@ const server = Bun.serve<{socketId: number}>({
           console.log(`Duplicate game request from ${ws.data.socketId}`);
           return;
         }
-        // TODO: Keep an array of open games.
-        if (content.gameType === 'pausing') {
-          for (const session of sessionBySocketId.values()) {
-            if (session.type === 'pausing' && session.players.length < 2) {
-              session.players.push(player);
-              sessionBySocketId.set(ws.data.socketId, session);
-              session.start();
+        if (content.autoMatch) {
+          for (const challenge of challenges) {
+            if (!challenge.autoMatch || challenge.password !== undefined) {
+              continue;
+            }
+            if (!content.botsAllowed && challenge.player.isBot) {
+              continue;
+            }
+            if (!challenge.botsAllowed && player.isBot) {
+              continue;
+            }
+            if (
+              challenge.gameType === content.gameType &&
+              challenge.ranked === content.ranked
+            ) {
+              startSession(challenge, player);
               return;
             }
           }
-          const session = new WebSocketPausingSession(player, args.verbose);
-          session.onComplete = onPausingComplete;
-          sessionBySocketId.set(ws.data.socketId, session);
-          return;
+          // No open challenge found. Make one.
+          const challenge = sanitizeChallenge(content);
+          challenges.add({
+            player,
+            ...challenge,
+          });
         } else {
-          for (const session of sessionBySocketId.values()) {
-            if (session.type === 'realtime' && session.players.length < 2) {
-              session.players.push(player);
-              sessionBySocketId.set(ws.data.socketId, session);
-              session.start();
-              activeRealtimeSessions.push(session);
-              return;
-            }
-          }
-          const session = new WebSocketRealtimeSession(player, args.verbose);
-          session.onComplete = onRealtimeComplete;
-          sessionBySocketId.set(ws.data.socketId, session);
-          return;
+          const challenge = sanitizeChallenge(content);
+          challenges.add({
+            player,
+            ...challenge,
+          });
         }
+        return;
+      }
+      if (content.type === 'challenge list') {
+        const listing: Challenge[] = [];
+        for (const challenge of challenges) {
+          if (challenge.password !== undefined) {
+            continue;
+          }
+          // Strip away player to protect user info
+          listing.push({
+            uuid: challenge.uuid,
+            name: challenge.name ?? challenge.player.name,
+            ranked: challenge.ranked,
+            gameType: challenge.gameType,
+            autoMatch: challenge.autoMatch,
+            botsAllowed: challenge.botsAllowed,
+          });
+        }
+        player.send({
+          type: 'challenge list',
+          challenges: listing,
+        });
+        return;
+      }
+      if (content.type === 'accept challenge') {
+        for (const challenge of challenges) {
+          if (
+            challenge.password !== undefined &&
+            challenge.password === content.password
+          ) {
+            startSession(challenge, player);
+            return;
+          }
+          if (challenge.uuid === content.uuid) {
+            startSession(challenge, player);
+            return;
+          }
+        }
+        player.send({
+          type: 'challenge not found',
+          uuid: content.uuid,
+          password: content.password,
+        });
       }
 
       const session = sessionBySocketId.get(ws.data.socketId);

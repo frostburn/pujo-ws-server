@@ -61,17 +61,16 @@ export class WebSocketSession {
   verbose: boolean;
   onComplete?: CompleteCallback;
 
-  constructor(player: Player, verbose?: boolean) {
+  constructor(players: Player[], verbose?: boolean) {
     this.gameSeed = randomSeed();
     this.screenSeed = randomSeed();
     const colorSelection = randomColorSelection();
     this.colorSelections = [colorSelection, colorSelection];
-    this.players = [player];
-    // TODO: True multiplayer
-    this.ready = [false, false];
-    this.waitingForMove = [false, false];
+    this.players = players;
+    this.ready = Array(players.length).fill(false);
+    this.waitingForMove = Array(players.length).fill(false);
     this.done = false;
-    this.timeouts = [null, null];
+    this.timeouts = Array(players.length).fill(null);
     this.verbose = !!verbose;
   }
 
@@ -247,21 +246,22 @@ export class WebSocketSession {
   }
 }
 
-export class WebSocketPausingSession extends WebSocketSession {
+export class PausingSession extends WebSocketSession {
   type = 'pausing' as const;
 
   game: MultiplayerGame;
   passed: boolean[];
   hiddenMove: ServerPausingMove | null;
 
-  constructor(player: Player, verbose?: boolean) {
-    super(player, verbose);
+  constructor(players: Player[], verbose?: boolean) {
+    super(players, verbose);
     this.game = new MultiplayerGame(
       this.gameSeed,
       this.screenSeed,
       this.colorSelections
     );
-    this.passed = [false, false];
+    this.passed = Array(players.length).fill(false);
+    // TODO: True multiplayer
     this.hiddenMove = null;
   }
 
@@ -388,14 +388,14 @@ export class WebSocketPausingSession extends WebSocketSession {
   }
 }
 
-export class WebSocketRealtimeSession extends WebSocketSession {
+export class RealtimeSession extends WebSocketSession {
   type = 'realtime' as const;
 
   game: TimeWarpingGame<MultiplayerGame>;
   age: number;
 
-  constructor(player: Player, verbose?: boolean) {
-    super(player, verbose);
+  constructor(players: Player[], verbose?: boolean) {
+    super(players, verbose);
     const origin = new MultiplayerGame(
       this.gameSeed,
       this.screenSeed,

@@ -2,6 +2,8 @@ import {ApplicationInfo, HEIGHT, WIDTH} from 'pujo-puyo-core';
 import {packages} from '../package-lock.json';
 import {name as appName, version} from '../package.json';
 import {
+  Challenge,
+  GameRequest,
   OrientedPausingMove,
   OrientedRealtimeMove,
   PassingMove,
@@ -131,4 +133,19 @@ export function sanitizeClientInfo(content: ApplicationInfo): ApplicationInfo {
     }
   }
   return result;
+}
+
+export function sanitizeChallenge(content: GameRequest): Challenge {
+  return {
+    uuid: crypto.randomUUID(),
+    gameType: content.gameType === 'pausing' ? 'pausing' : 'realtime',
+    autoMatch: !!content.autoMatch,
+    ranked: !!content.ranked,
+    botsAllowed: !!content.botsAllowed,
+    name: content.name === undefined ? undefined : clampString(content.name),
+    password:
+      content.password === undefined
+        ? undefined
+        : clampString(content.password),
+  };
 }
