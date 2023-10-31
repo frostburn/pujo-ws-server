@@ -143,6 +143,14 @@ const server = Bun.serve<{socketId: number}>({
       console.log('Connection closed.', code, reason);
 
       const player = playerBySocketId.get(ws.data.socketId)!;
+
+      for (const challenge of challenges) {
+        if (challenge.player === player) {
+          challenges.delete(challenge);
+          break;
+        }
+      }
+
       playerBySocketId.delete(ws.data.socketId);
       const session = sessionBySocketId.get(ws.data.socketId);
       if (session !== undefined) {
@@ -256,6 +264,15 @@ const server = Bun.serve<{socketId: number}>({
             player,
             ...challenge,
           });
+        }
+        return;
+      }
+      if (content.type === 'cancel game request') {
+        for (const challenge of challenges) {
+          if (challenge.player === player) {
+            challenges.delete(challenge);
+            return;
+          }
         }
         return;
       }
