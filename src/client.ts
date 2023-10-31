@@ -66,6 +66,16 @@ class ClientSocket extends WebSocket {
   sendMessage(message: ClientMessage) {
     return super.send(JSON.stringify(message));
   }
+
+  requestGame() {
+    this.sendMessage({
+      type: 'game request',
+      gameType: 'pausing',
+      autoMatch: true,
+      botsAllowed: true,
+      ranked: true,
+    });
+  }
 }
 
 const socket = new ClientSocket(args.server);
@@ -215,10 +225,7 @@ socket.addEventListener('message', event => {
       losses++;
     }
     console.log(`Game Over: ${result}, ${data.reason}`);
-    socket.sendMessage({
-      type: 'game request',
-      gameType: 'pausing',
-    });
+    socket.requestGame();
     // Update Elo rating
     socket.sendMessage({type: 'user'});
   }
@@ -238,10 +245,7 @@ socket.addEventListener('open', () => {
     isBot: true,
     clientInfo: CLIENT_INFO,
   });
-  socket.sendMessage({
-    type: 'game request',
-    gameType: 'pausing',
-  });
+  socket.requestGame();
 });
 
 socket.addEventListener('close', event => {
