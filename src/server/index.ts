@@ -153,6 +153,11 @@ const server = Bun.serve<{socketId: number}>({
     async message(ws, message) {
       console.log(`Received ${message} from ${ws.data.socketId}`);
 
+      if (message === 'ping') {
+        ws.send('pong');
+        return;
+      }
+
       let content: ClientMessage | DatabaseMessage;
       if (message instanceof Buffer) {
         content = JSON.parse(message.toString());
