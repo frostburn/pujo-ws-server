@@ -10,8 +10,8 @@ import {
 } from 'pujo-puyo-core';
 import {config} from 'dotenv';
 import argParse from 'minimist';
-import {CLIENT_INFO} from './util';
-import {ClientMessage, RealtimeMove, ServerMessage} from './api';
+import {CLIENT_INFO, ClientSocket} from './util';
+import {RealtimeMove, ServerMessage} from './api';
 
 config();
 
@@ -63,22 +63,6 @@ const authUuid = args.soft
 
 console.log(`Runnig ${username}. Connecting to ${args.server}`);
 
-class ClientSocket extends WebSocket {
-  sendMessage(message: ClientMessage) {
-    return super.send(JSON.stringify(message));
-  }
-
-  requestGame() {
-    this.sendMessage({
-      type: 'game request',
-      gameType: 'realtime',
-      autoMatch: true,
-      botsAllowed: true,
-      ranked: true,
-    });
-  }
-}
-
 const socket = new ClientSocket(args.server);
 
 let passing = false;
@@ -95,13 +79,7 @@ let elo = 1000;
 
 let lastMove: RealtimeMove | null = null;
 
-socket.addEventListener('message', event => {
-  let data: ServerMessage;
-  if (event.data instanceof Buffer) {
-    data = JSON.parse(event.data.toString());
-  } else {
-    data = JSON.parse(event.data);
-  }
+socket.addMessageListener((data: ServerMessage) => {
   if (args.verbose) {
     console.log('Message received', data);
   }
@@ -214,7 +192,7 @@ socket.addEventListener('message', event => {
       losses++;
     }
     console.log(`Game Over: ${result}, ${data.reason}`);
-    socket.requestGame();
+    socket.requestGame('realtime');
     // Update Elo rating
     socket.sendMessage({type: 'user'});
   }
@@ -234,7 +212,7 @@ socket.addEventListener('open', () => {
     isBot: true,
     clientInfo: CLIENT_INFO,
   });
-  socket.requestGame();
+  socket.requestGame('realtime');
 });
 
 socket.addEventListener('close', event => {

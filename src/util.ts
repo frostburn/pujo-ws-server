@@ -3,12 +3,15 @@ import {packages} from '../package-lock.json';
 import {name as appName, version} from '../package.json';
 import {
   Challenge,
+  ClientMessage,
   GameRequest,
+  GameType,
   OrientedPausingMove,
   OrientedRealtimeMove,
   PassingMove,
   PausingMove,
   RealtimeMove,
+  ServerMessage,
 } from './api';
 
 export const MAX_CONSECUTIVE_REROLLS = 20;
@@ -148,4 +151,59 @@ export function sanitizeChallenge(content: GameRequest): Challenge {
         ? undefined
         : clampString(content.password),
   };
+}
+
+export class ClientSocket extends WebSocket {
+  pongTimeout: Timer | null;
+
+  constructor(url: string | URL) {
+    super(url);
+    this.pongTimeout = null;
+
+    this.onopen = () => {
+      setInterval(this.heartbeat.bind(this), 10000);
+    };
+  }
+
+  cardiacArrest() {
+    this.close();
+    setTimeout(process.exit, 1000);
+  }
+
+  heartbeat() {
+    this.send('ping');
+    this.pongTimeout = setTimeout(this.cardiacArrest.bind(this), 2000);
+  }
+
+  sendMessage(message: ClientMessage) {
+    return super.send(JSON.stringify(message));
+  }
+
+  requestGame(gameType: GameType) {
+    this.sendMessage({
+      type: 'game request',
+      gameType,
+      autoMatch: true,
+      botsAllowed: true,
+      ranked: true,
+    });
+  }
+
+  addMessageListener(listener: (message: ServerMessage) => void) {
+    super.addEventListener('message', event => {
+      if (event.data === 'pong') {
+        if (this.pongTimeout !== null) {
+          clearTimeout(this.pongTimeout);
+        }
+      } else {
+        let data: ServerMessage;
+        if (event.data instanceof Buffer) {
+          data = JSON.parse(event.data.toString());
+        } else {
+          data = JSON.parse(event.data);
+        }
+        listener(data);
+      }
+    });
+  }
 }
