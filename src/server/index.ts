@@ -151,12 +151,15 @@ const server = Bun.serve<{socketId: number}>({
     },
     // this is called when a message is received
     async message(ws, message) {
-      console.log(`Received ${message} from ${ws.data.socketId}`);
-
       if (message === 'ping') {
         ws.send('pong');
+        if (args.verbose) {
+          console.log(`Heartbeat from ${ws.data.socketId}`);
+        }
         return;
       }
+
+      console.log(`Received ${message} from ${ws.data.socketId}`);
 
       let content: ClientMessage | DatabaseMessage;
       if (message instanceof Buffer) {
