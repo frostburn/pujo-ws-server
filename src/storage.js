@@ -73,11 +73,7 @@ export async function saveReplay(replay, userIds) {
   delete data.result;
   delete data.metadata;
 
-  if (replay.result.winner === undefined) {
-    data.winner = null;
-  } else {
-    data.winner = userIds[replay.result.winner];
-  }
+  data.winner = replay.result.winner;
   data.reason = replay.result.reason;
 
   data.leftPlayer = userIds[0];

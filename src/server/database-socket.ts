@@ -18,7 +18,12 @@ export class DatabaseSocket {
   }
 
   reject(content: ClientMessage | DatabaseMessage) {
-    if (content.type === 'database:hello' || content.type === 'database:user') {
+    if (
+      content.type === 'database:hello' ||
+      content.type === 'database:user' ||
+      content.type === 'database:replays' ||
+      content.type === 'database:replay'
+    ) {
       return content.authorization !== this.authorization;
     }
     return false;

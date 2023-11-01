@@ -206,6 +206,17 @@ const server = Bun.serve<{socketId: number}>({
         return;
       }
 
+      if (
+        content.type === 'database:replays' ||
+        content.type === 'database:replay'
+      ) {
+        const receiver = playerBySocketId.get(content.socketId);
+        if (receiver) {
+          receiver.send(content.payload);
+        }
+        return;
+      }
+
       const player = playerBySocketId.get(ws.data.socketId)!;
 
       if (content.type === 'user') {
@@ -321,6 +332,14 @@ const server = Bun.serve<{socketId: number}>({
           uuid: content.uuid,
           password: content.password,
         });
+      }
+
+      if (content.type === 'list replays' || content.type === 'get replay') {
+        if (databaseSocket) {
+          content.socketId = ws.data.socketId;
+          databaseSocket.send(content);
+        }
+        return;
       }
 
       const session = sessionBySocketId.get(ws.data.socketId);

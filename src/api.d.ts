@@ -22,6 +22,21 @@ type Challenge = {
   password?: string;
 };
 
+type ReplayFragment = {
+  id: number;
+  userIds: number[];
+  winner: Replay['result']['winner'];
+  reason: Replay['result']['reason'];
+  names: Replay['metadata']['names'];
+  elos: Replay['metadata']['elos'];
+  event: Replay['metadata']['event'];
+  site: Replay['metadata']['site'];
+  msSince1970: Replay['metadata']['msSince1970'];
+  endTime: Replay['metadata']['endTime'];
+  type: Replay['metadata']['type'];
+  timecontrol: Replay['metadata']['timeControl'];
+};
+
 // Incoming (server's perspective)
 
 type PausingMoveBase = {
@@ -85,14 +100,17 @@ type AcceptChallenge = {
   password?: string;
 };
 
-type UserMessage = {
+type ClientRelay = {
+  socketId?: number;
+};
+
+interface UserMessage extends ClientRelay {
   type: 'user';
   username?: string;
   isBot?: boolean;
   clientInfo?: ApplicationInfo;
   authUuid?: string;
-  socketId?: number;
-};
+}
 
 type SimpleStateRequest = {
   type: 'simple state request';
@@ -111,6 +129,20 @@ type CancelGameRequest = {
   type: 'cancel game request';
 };
 
+interface ListReplays extends ClientRelay {
+  type: 'list replays';
+  limit?: number;
+  offset?: number;
+  orderBy?: string;
+  direction?: 'ASC' | 'DESC';
+  userId?: number;
+}
+
+interface GetReplay extends ClientRelay {
+  type: 'get replay';
+  id: number;
+}
+
 type ClientMessage =
   | GameRequest
   | ChallengeListRequest
@@ -121,7 +153,9 @@ type ClientMessage =
   | ResultMessage
   | ReadyMessage
   | PausingMove
-  | RealtimeMove;
+  | RealtimeMove
+  | ListReplays
+  | GetReplay;
 
 // Outgoing (server's perspective)
 
@@ -204,6 +238,16 @@ type ChallengeNotFound = {
   password?: string;
 };
 
+type ServerReplays = {
+  type: 'replays';
+  replays: ReplayFragment[];
+};
+
+type ServerReplay = {
+  type: 'replay';
+  replay: Replay;
+};
+
 type ServerMessage =
   | GameParams
   | PieceMessage
@@ -216,7 +260,9 @@ type ServerMessage =
   | ServerUserMessage
   | ChallengeNotFound
   | ChallengeList
-  | GoMessage;
+  | GoMessage
+  | ServerReplays
+  | ServerReplay;
 
 // Database interaction
 
@@ -225,14 +271,31 @@ type DatabaseHello = {
   authorization: string;
 };
 
-type DatabaseUser = {
-  type: 'database:user';
+type DatabaseRelay = {
   socketId: number;
   authorization: string;
-  payload: ServerUserMessage;
 };
 
-type DatabaseMessage = DatabaseHello | DatabaseUser;
+interface DatabaseUser extends DatabaseRelay {
+  type: 'database:user';
+  payload: ServerUserMessage;
+}
+
+interface DatabaseReplays extends DatabaseRelay {
+  type: 'database:replays';
+  payload: ServerReplays;
+}
+
+interface DatabaseReplay extends DatabaseRelay {
+  type: 'database:replay';
+  payload: ServerReplay;
+}
+
+type DatabaseMessage =
+  | DatabaseHello
+  | DatabaseUser
+  | DatabaseReplays
+  | DatabaseReplay;
 
 type EloUpdate = {
   type: 'elo update';
@@ -247,4 +310,9 @@ type ReplayInsert = {
   authUuids: string[];
 };
 
-type DatabaseQuery = EloUpdate | UserMessage | ReplayInsert;
+type DatabaseQuery =
+  | EloUpdate
+  | ReplayInsert
+  | UserMessage
+  | ListReplays
+  | GetReplay;

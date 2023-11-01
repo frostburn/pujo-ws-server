@@ -1,7 +1,7 @@
 import WebSocket from 'ws';
 import sql from './db.js';
 import {updateElos} from './elo.js';
-import {saveReplay} from './storage.js';
+import {loadReplay, saveReplay} from './storage.js';
 
 const MAX_REPLAYS_PER_ORDERED_PAIR = 500;
 
@@ -69,6 +69,7 @@ async function onMessage(data) {
         payload,
       })
     );
+    return;
   }
 
   if (content.type === 'elo update') {
@@ -105,6 +106,7 @@ async function onMessage(data) {
         await sql`UPDATE users SET elo_pausing = ${elo} WHERE auth_uuid = ${authUuid};`;
       }
     }
+    return;
   }
 
   if (content.type === 'replay') {
@@ -131,6 +133,66 @@ async function onMessage(data) {
         SELECT id FROM replays WHERE left_player = ${userIds[0]} AND right_player = ${userIds[1]} ORDER BY id LIMIT ${excess}
       );`;
     }
+    return;
+  }
+
+  if (content.type === 'list replays') {
+    const limit = Math.max(1, Math.min(50, parseInt(content.limit) | 0));
+    const offset = Math.max(0, parseInt(content.offset) | 0);
+    let orderBy;
+    if (content.direction === 'DESC') {
+      orderBy = sql`ORDER BY ${content.orderBy ?? 'id'} DESC`;
+    } else {
+      orderBy = sql`ORDER BY ${content.orderBy ?? 'id'} ASC`;
+    }
+    let where = sql``;
+    if (content.userId !== undefined) {
+      where = sql`WHERE left_player = ${content.userId} OR right_player = ${content.userId}`;
+    }
+    const replays = await sql`
+      SELECT id, winner, reason, names, elos, event, site, round, ms_since1970, end_time, type, time_control, left_player, right_player
+        FROM replays ${where} ${orderBy} LIMIT ${limit} OFFSET ${offset};`;
+
+    for (const replay of replays) {
+      replay.userIds = [replay.leftPlayer, replay.rightPlayer];
+      delete replay.leftPlayer;
+      delete replay.rightPlayer;
+      replay.msSince1970 = parseInt(replay.msSince1970, 10);
+      if (replay.endTime) {
+        replay.endTime = parseInt(replay.endTime, 10);
+      }
+    }
+
+    const payload = {
+      type: 'replays',
+      replays,
+    };
+    ws.send(
+      JSON.stringify({
+        type: 'database:replays',
+        authorization,
+        socketId: content.socketId,
+        payload,
+      })
+    );
+    return;
+  }
+
+  if (content.type === 'get replay') {
+    const replay = await loadReplay(content.id);
+    const payload = {
+      type: 'replay',
+      replay,
+    };
+    ws.send(
+      JSON.stringify({
+        type: 'database:replay',
+        authorization,
+        socketId: content.socketId,
+        payload,
+      })
+    );
+    return;
   }
 }
 
