@@ -245,7 +245,7 @@ type ServerReplays = {
 
 type ServerReplay = {
   type: 'replay';
-  replay: Replay;
+  replay?: Replay;
 };
 
 type ServerMessage =
@@ -307,6 +307,7 @@ type EloUpdate = {
 type ReplayInsert = {
   type: 'replay';
   replay: Replay;
+  private: boolean;
   authUuids: string[];
 };
 

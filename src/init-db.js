@@ -33,6 +33,7 @@ import sql from './db.js';
   // Reflects the Replay type.
   await sql`CREATE TABLE replays (
     id SERIAL PRIMARY KEY,
+    private BOOLEAN,
     -- Main fields
     game_seed BIGINT NOT NULL,
     screen_seed BIGINT NOT NULL,

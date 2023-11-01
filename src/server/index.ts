@@ -44,6 +44,7 @@ function onPausingComplete(session: WebSocketSession) {
     databaseSocket.send({
       type: 'replay',
       replay: session.toReplay(),
+      private: session.private,
       authUuids,
     });
   }
@@ -74,6 +75,7 @@ function onRealtimeComplete(session: WebSocketSession) {
     databaseSocket.send({
       type: 'replay',
       replay: session.toReplay(),
+      private: session.private,
       authUuids,
     });
   }
@@ -107,10 +109,18 @@ function startSession(challenge: OpenChallenge, challenger: Player) {
   const players = [challenge.player, challenger];
   let session: PausingSession | RealtimeSession;
   if (challenge.gameType === 'pausing') {
-    session = new PausingSession(players, args.verbose);
+    session = new PausingSession(
+      players,
+      challenge.password !== undefined,
+      args.verbose
+    );
     session.onComplete = onPausingComplete;
   } else {
-    session = new RealtimeSession(players, args.verbose);
+    session = new RealtimeSession(
+      players,
+      challenge.password !== undefined,
+      args.verbose
+    );
     session.onComplete = onRealtimeComplete;
     activeRealtimeSessions.push(session);
   }

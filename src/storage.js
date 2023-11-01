@@ -67,8 +67,9 @@ function decodeMove(byteBall) {
   return result;
 }
 
-export async function saveReplay(replay, userIds) {
+export async function saveReplay(replay, private_, userIds) {
   const data = {...replay, ...replay.metadata};
+  data.private = private_;
 
   delete data.result;
   delete data.metadata;
@@ -88,7 +89,12 @@ export async function saveReplay(replay, userIds) {
 }
 
 export async function loadReplay(replayId) {
-  const rows = await sql`SELECT * FROM replays WHERE id = ${replayId};`;
+  const rows =
+    await sql`SELECT * FROM replays WHERE id = ${replayId} AND NOT private;`;
+
+  if (!rows.length) {
+    return undefined;
+  }
 
   const data = rows[0];
 

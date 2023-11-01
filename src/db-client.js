@@ -122,7 +122,7 @@ async function onMessage(data) {
     if (content.mercyFrames === null) {
       content.mercyFrames = Infinity;
     }
-    await saveReplay(content.replay, userIds);
+    await saveReplay(content.replay, content.private, userIds);
 
     const rows =
       await sql`SELECT COUNT(id) FROM replays WHERE left_player = ${userIds[0]} AND right_player = ${userIds[1]};`;
@@ -145,9 +145,9 @@ async function onMessage(data) {
     } else {
       orderBy = sql`ORDER BY ${content.orderBy ?? 'id'} ASC`;
     }
-    let where = sql``;
+    let where = sql`WHERE NOT private`;
     if (content.userId !== undefined) {
-      where = sql`WHERE left_player = ${content.userId} OR right_player = ${content.userId}`;
+      where = sql`WHERE NOT private AND (left_player = ${content.userId} OR right_player = ${content.userId})`;
     }
     const replays = await sql`
       SELECT id, winner, reason, names, elos, event, site, round, ms_since1970, end_time, type, time_control, left_player, right_player

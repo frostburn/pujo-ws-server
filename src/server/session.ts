@@ -59,10 +59,11 @@ export class WebSocketSession {
   waitingForMove: boolean[];
   done: boolean;
   timeouts: (Timer | null)[];
+  private: boolean;
   verbose: boolean;
   onComplete?: CompleteCallback;
 
-  constructor(players: Player[], verbose?: boolean) {
+  constructor(players: Player[], private_: boolean, verbose?: boolean) {
     this.gameSeed = randomSeed();
     this.screenSeed = randomSeed();
     const colorSelection = randomColorSelection();
@@ -72,6 +73,7 @@ export class WebSocketSession {
     this.waitingForMove = Array(players.length).fill(false);
     this.done = false;
     this.timeouts = Array(players.length).fill(null);
+    this.private = private_;
     this.verbose = !!verbose;
     this.reason = 'ongoing';
   }
@@ -284,8 +286,8 @@ export class PausingSession extends WebSocketSession {
 
   playedMoves: PlayedMove[];
 
-  constructor(players: Player[], verbose?: boolean) {
-    super(players, verbose);
+  constructor(players: Player[], private_: boolean, verbose?: boolean) {
+    super(players, private_, verbose);
     this.game = new MultiplayerGame(
       this.gameSeed,
       this.screenSeed,
@@ -436,8 +438,8 @@ export class RealtimeSession extends WebSocketSession {
   game: TimeWarpingGame<MultiplayerGame>;
   age: number;
 
-  constructor(players: Player[], verbose?: boolean) {
-    super(players, verbose);
+  constructor(players: Player[], private_: boolean, verbose?: boolean) {
+    super(players, private_, verbose);
     const origin = new MultiplayerGame(
       this.gameSeed,
       this.screenSeed,
