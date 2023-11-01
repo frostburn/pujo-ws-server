@@ -1,6 +1,9 @@
 import WebSocket from 'ws';
 import sql from './db.js';
 import {updateElos} from './elo.js';
+import {saveReplay} from './storage.js';
+
+const MAX_REPLAYS_PER_ORDERED_PAIR = 500;
 
 function clampString(str, maxLength = 255) {
   return [...str].slice(0, maxLength).join('');
@@ -101,6 +104,32 @@ async function onMessage(data) {
       } else {
         await sql`UPDATE users SET elo_pausing = ${elo} WHERE auth_uuid = ${authUuid};`;
       }
+    }
+  }
+
+  if (content.type === 'replay') {
+    const userIds = [];
+    for (const authUuid of content.authUuids) {
+      const rows =
+        await sql`SELECT id FROM users WHERE auth_uuid = ${authUuid};`;
+      userIds.push(rows[0].id);
+    }
+    if (content.marginFrames === null) {
+      content.marginFrames = Infinity;
+    }
+    if (content.mercyFrames === null) {
+      content.mercyFrames = Infinity;
+    }
+    await saveReplay(content.replay, userIds);
+
+    const rows =
+      await sql`SELECT COUNT(id) FROM replays WHERE left_player = ${userIds[0]} AND right_player = ${userIds[1]};`;
+    const count = rows[0].count;
+    if (count > MAX_REPLAYS_PER_ORDERED_PAIR) {
+      const excess = count - MAX_REPLAYS_PER_ORDERED_PAIR;
+      await sql`DELETE FROM replays WHERE id IN (
+        SELECT id FROM replays WHERE left_player = ${userIds[0]} AND right_player = ${userIds[1]} ORDER BY id LIMIT ${excess}
+      );`;
     }
   }
 }

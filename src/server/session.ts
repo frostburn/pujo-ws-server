@@ -2,6 +2,8 @@ import {
   FischerTimer,
   MultiplayerGame,
   NOMINAL_FRAME_RATE,
+  PlayedMove,
+  Replay,
   ReplayMetadata,
   ReplayResultReason,
   TimeWarpingGame,
@@ -41,11 +43,7 @@ const MAX_ADVANTAGE = 3;
 const CHECKPOINT_INTERVAL = 5;
 const MAX_CHECKPOINTS = 10;
 
-export type CompleteCallback = (
-  session: WebSocketSession,
-  players: Player[],
-  winner?: number
-) => void;
+export type CompleteCallback = (session: WebSocketSession) => void;
 
 export class WebSocketSession {
   type: GameType | undefined = undefined;
@@ -53,6 +51,9 @@ export class WebSocketSession {
   gameSeed: number;
   screenSeed: number;
   colorSelections: number[][];
+  metadata?: ReplayMetadata;
+  winner?: number;
+  reason: ReplayResultReason;
   players: Player[];
   ready: boolean[];
   waitingForMove: boolean[];
@@ -72,9 +73,13 @@ export class WebSocketSession {
     this.done = false;
     this.timeouts = Array(players.length).fill(null);
     this.verbose = !!verbose;
+    this.reason = 'ongoing';
   }
 
-  start(origin: MultiplayerGame, metadata: ReplayMetadata) {
+  start(origin: MultiplayerGame) {
+    if (!this.metadata) {
+      throw new Error('Metadata must be set before calling start');
+    }
     const initialBags = origin.initialBags;
     this.players.forEach((player, i) => {
       this.ready[i] = false;
@@ -87,7 +92,7 @@ export class WebSocketSession {
         mercyFrames: origin.mercyFrames,
         initialBags,
         identity: i,
-        metadata,
+        metadata: this.metadata!,
       });
       this.waitForMove(i);
     });
@@ -107,17 +112,21 @@ export class WebSocketSession {
   }
 
   disqualifyPlayer(player: number, reason: ReplayResultReason = 'timeout') {
-    const winner = 1 - player;
-    this.sendResult(winner, reason);
-    this.complete(winner);
+    this.winner = 1 - player;
+    this.reason = reason;
+    this.sendResult();
+    this.complete();
   }
 
-  sendResult(winner: number | undefined, reason: ReplayResultReason) {
+  sendResult() {
     const msSince1970 = new Date().valueOf();
+    if (this.metadata) {
+      this.metadata.endTime = msSince1970;
+    }
     const result: GameResult = {
       type: 'game result',
-      winner,
-      reason,
+      winner: this.winner,
+      reason: this.reason,
       msSince1970,
       gameSeed: this.gameSeed,
     };
@@ -127,7 +136,7 @@ export class WebSocketSession {
     this.players.forEach(p => p.send(result));
   }
 
-  complete(winner?: number) {
+  complete() {
     if (this.done) {
       return;
     }
@@ -138,7 +147,7 @@ export class WebSocketSession {
       }
     });
     if (this.onComplete) {
-      this.onComplete(this, this.players, winner);
+      this.onComplete(this);
     }
   }
 
@@ -147,16 +156,18 @@ export class WebSocketSession {
       return;
     }
     // XXX: Assumes a duel
-    let winner: number | undefined;
     this.players.forEach((opponent, i) => {
       if (opponent !== player) {
-        winner = i;
-        const reason: ReplayResultReason = 'disconnect';
+        this.winner = i;
+        this.reason = 'disconnect';
         const msSince1970 = new Date().valueOf();
+        if (this.metadata) {
+          this.metadata.endTime = msSince1970;
+        }
         const result: GameResult = {
           type: 'game result',
-          winner,
-          reason,
+          winner: this.winner,
+          reason: this.reason,
           msSince1970,
           gameSeed: this.gameSeed,
         };
@@ -166,7 +177,7 @@ export class WebSocketSession {
         opponent.send(result);
       }
     });
-    this.complete(winner);
+    this.complete();
   }
 
   onMessage(player: Player, content: ClientMessage) {
@@ -184,12 +195,10 @@ export class WebSocketSession {
     } else if (content.type === 'simple state request') {
       this.onSimpleGameRequest(player);
     } else if (content.type === 'result') {
-      const winner = 1 - index;
-      const reason: ReplayResultReason = clampString(
-        content.reason
-      ) as ReplayResultReason;
-      this.sendResult(winner, reason);
-      this.complete(winner);
+      this.winner = 1 - index;
+      this.reason = clampString(content.reason) as ReplayResultReason;
+      this.sendResult();
+      this.complete();
     } else if (
       content.type === 'pausing move' ||
       content.type === 'realtime move'
@@ -221,28 +230,48 @@ export class WebSocketSession {
       return;
     }
     if (game.games[0].lockedOut && game.games[1].lockedOut) {
-      const reason: ReplayResultReason = 'double lockout';
-      const winner = undefined;
-      this.sendResult(winner, reason);
-      this.complete(winner);
+      this.winner = undefined;
+      this.reason = 'double lockout';
+      this.sendResult();
+      this.complete();
     } else if (game.games[0].lockedOut || game.games[1].lockedOut) {
-      const winner = game.games[0].lockedOut ? 1 : 0;
-      const reason: ReplayResultReason = 'lockout';
-      this.sendResult(winner, reason);
-      this.complete(winner);
+      this.winner = game.games[0].lockedOut ? 1 : 0;
+      this.reason = 'lockout';
+      this.sendResult();
+      this.complete();
     } else if (
       game.games.every(g => g.consecutiveRerolls >= MAX_CONSECUTIVE_REROLLS)
     ) {
-      const reason: ReplayResultReason = 'impasse';
-      const winner = undefined;
-      this.sendResult(winner, reason);
-      this.complete(winner);
+      this.winner = undefined;
+      this.reason = 'impasse';
+      this.sendResult();
+      this.complete();
     } else if (game.age > MAX_GAME_AGE) {
-      const reason: ReplayResultReason = 'max time exceeded';
-      const winner = undefined;
-      this.sendResult(winner, reason);
-      this.complete(winner);
+      this.winner = undefined;
+      this.reason = 'max time exceeded';
+      this.sendResult();
+      this.complete();
     }
+  }
+
+  toReplay(): Replay {
+    if (!this.metadata) {
+      throw new Error('Metadata must be set before converting to replay');
+    }
+    return {
+      gameSeed: this.gameSeed,
+      screenSeed: this.screenSeed,
+      colorSelections: this.colorSelections,
+      marginFrames: NaN,
+      mercyFrames: NaN,
+      targetPoints: [NaN, NaN],
+      moves: [],
+      metadata: this.metadata,
+      result: {
+        winner: this.winner,
+        reason: this.reason,
+      },
+    };
   }
 }
 
@@ -252,6 +281,8 @@ export class PausingSession extends WebSocketSession {
   game: MultiplayerGame;
   passed: boolean[];
   hiddenMove: ServerPausingMove | null;
+
+  playedMoves: PlayedMove[];
 
   constructor(players: Player[], verbose?: boolean) {
     super(players, verbose);
@@ -263,10 +294,11 @@ export class PausingSession extends WebSocketSession {
     this.passed = Array(players.length).fill(false);
     // TODO: True multiplayer
     this.hiddenMove = null;
+    this.playedMoves = [];
   }
 
   start() {
-    const metadata: ReplayMetadata = {
+    this.metadata = {
       names: this.players.map(p => p.name),
       elos: this.players.map(p => p.eloPausing),
       priorWins: [0, 0],
@@ -277,9 +309,9 @@ export class PausingSession extends WebSocketSession {
       msSince1970: new Date().valueOf(),
       type: 'pausing',
       server: CLIENT_INFO,
-      clients: this.players.map(p => p.clientInfo || null),
+      clients: this.players.map(p => p.clientInfo ?? null),
     };
-    super.start(this.game, metadata);
+    super.start(this.game);
   }
 
   postGo() {
@@ -320,6 +352,7 @@ export class PausingSession extends WebSocketSession {
         sanitized.orientation,
         sanitized.hardDrop
       );
+      this.playedMoves.push(playedMove);
       move = {
         type: 'pausing move',
         msRemaining: sanitized.msRemaining,
@@ -386,6 +419,15 @@ export class PausingSession extends WebSocketSession {
       }
     }
   }
+
+  toReplay(): Replay {
+    const result = super.toReplay();
+    result.marginFrames = this.game.marginFrames;
+    result.mercyFrames = this.game.mercyFrames;
+    result.targetPoints = this.game.targetPoints;
+    result.moves = this.playedMoves;
+    return result;
+  }
 }
 
 export class RealtimeSession extends WebSocketSession {
@@ -410,7 +452,7 @@ export class RealtimeSession extends WebSocketSession {
   }
 
   start() {
-    const metadata: ReplayMetadata = {
+    this.metadata = {
       names: this.players.map(p => p.name),
       elos: this.players.map(p => p.eloRealtime),
       priorWins: [0, 0],
@@ -422,7 +464,7 @@ export class RealtimeSession extends WebSocketSession {
       server: CLIENT_INFO,
       clients: this.players.map(p => p.clientInfo || null),
     };
-    super.start(this.game.origin, metadata);
+    super.start(this.game.origin);
   }
 
   onSimpleGameRequest(player: Player): void {
@@ -511,5 +553,14 @@ export class RealtimeSession extends WebSocketSession {
       this.players.forEach(p => p.send(msg));
       this.waitForMove(piece.player);
     }
+  }
+
+  toReplay(): Replay {
+    const result = super.toReplay();
+    result.marginFrames = this.game.origin.marginFrames;
+    result.mercyFrames = this.game.origin.mercyFrames;
+    result.targetPoints = this.game.origin.targetPoints;
+    result.moves = this.game.moves;
+    return result;
   }
 }

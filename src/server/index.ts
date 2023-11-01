@@ -25,52 +25,56 @@ const sessionBySocketId: Map<number, PausingSession | RealtimeSession> =
 const databaseAuthorization = crypto.randomUUID();
 let databaseSocket: DatabaseSocket | null = null;
 
-function onPausingComplete(
-  session: WebSocketSession,
-  players: Player[],
-  winner?: number
-) {
-  players.forEach(player =>
+function onPausingComplete(session: WebSocketSession) {
+  session.players.forEach(player =>
     sessionBySocketId.delete(player.socket.data.socketId)
   );
   if (
     databaseSocket &&
-    players.length === 2 &&
-    players.every(p => p.authUuid)
+    session.players.length === 2 &&
+    session.players.every(p => p.authUuid)
   ) {
+    const authUuids = session.players.map(p => p.authUuid!);
     databaseSocket.send({
       type: 'elo update',
       gameType: 'pausing',
-      winner,
-      authUuids: players.map(p => p.authUuid!),
+      winner: session.winner,
+      authUuids,
+    });
+    databaseSocket.send({
+      type: 'replay',
+      replay: session.toReplay(),
+      authUuids,
     });
   }
 }
 
-function onRealtimeComplete(
-  session: WebSocketSession,
-  players: Player[],
-  winner?: number
-) {
+function onRealtimeComplete(session: WebSocketSession) {
   if (activeRealtimeSessions.includes(session as RealtimeSession)) {
     activeRealtimeSessions.splice(
       activeRealtimeSessions.indexOf(session as RealtimeSession),
       1
     );
   }
-  players.forEach(player =>
+  session.players.forEach(player =>
     sessionBySocketId.delete(player.socket.data.socketId)
   );
   if (
     databaseSocket &&
-    players.length === 2 &&
-    players.every(p => p.authUuid)
+    session.players.length === 2 &&
+    session.players.every(p => p.authUuid)
   ) {
+    const authUuids = session.players.map(p => p.authUuid!);
     databaseSocket.send({
       type: 'elo update',
       gameType: 'realtime',
-      winner,
-      authUuids: players.map(p => p.authUuid!),
+      winner: session.winner,
+      authUuids,
+    });
+    databaseSocket.send({
+      type: 'replay',
+      replay: session.toReplay(),
+      authUuids,
     });
   }
 }

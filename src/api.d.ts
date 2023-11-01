@@ -241,4 +241,10 @@ type EloUpdate = {
   authUuids: string[];
 };
 
-type DatabaseQuery = EloUpdate | UserMessage;
+type ReplayInsert = {
+  type: 'replay';
+  replay: Replay;
+  authUuids: string[];
+};
+
+type DatabaseQuery = EloUpdate | UserMessage | ReplayInsert;
