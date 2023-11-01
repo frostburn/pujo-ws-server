@@ -27,38 +27,46 @@ const BOTS: Record<
     username: string;
     strategy: typeof nullStrategy | typeof randomStrategy;
     authUuid: string;
+    softAuthUuid: string;
   }
 > = {
   null: {
     username: 'Null (bot)',
     strategy: nullStrategy,
     authUuid: process.env.BOT_UUID_NULL || crypto.randomUUID(),
+    softAuthUuid: process.env.BOT_UUID_SOFT_NULL || crypto.randomUUID(),
   },
   random: {
     username: 'Random (bot)',
     strategy: randomStrategy,
     authUuid: process.env.BOT_UUID_RANDOM || crypto.randomUUID(),
+    softAuthUuid: process.env.BOT_UUID_SOFT_RANDOM || crypto.randomUUID(),
   },
   flex1: {
     username: 'FlexDroplet1 (bot)',
     strategy: flexDropletStrategy1,
     authUuid: process.env.BOT_UUID_FLEX1 || crypto.randomUUID(),
+    softAuthUuid: process.env.BOT_UUID_SOFT_FLEX1 || crypto.randomUUID(),
   },
   flex2: {
     username: 'FlexDroplet2 (bot)',
     strategy: flexDropletStrategy2,
     authUuid: process.env.BOT_UUID_FLEX2 || crypto.randomUUID(),
+    softAuthUuid: process.env.BOT_UUID_SOFT_FLEX2 || crypto.randomUUID(),
   },
   flex3: {
     username: 'FlexDroplet3 (bot)',
     strategy: flexDropletStrategy3,
     authUuid: process.env.BOT_UUID_FLEX3 || crypto.randomUUID(),
+    softAuthUuid: process.env.BOT_UUID_SOFT_FLEX3 || crypto.randomUUID(),
   },
 };
 
 const bot = BOTS[args.bot].strategy;
-const username = BOTS[args.bot].username;
-const authUuid = BOTS[args.bot].authUuid;
+const username = (args.soft ? 'Soft ' : '') + BOTS[args.bot].username;
+const authUuid = args.soft
+  ? BOTS[args.bot].softAuthUuid
+  : BOTS[args.bot].authUuid;
 
 console.log(`Runnig ${username}. Connecting to ${args.server}`);
 

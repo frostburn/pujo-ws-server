@@ -86,9 +86,15 @@ async function onMessage(data) {
       // Make the random bot an anchor.
       if (authUuid === process.env.BOT_UUID_RANDOM) {
         elo = 1000;
+      } else if (authUuid === process.env.BOT_UUID_SOFT_RANDOM) {
+        // Based on a score of 100569.5 out of 194877 games against random.
+        elo = 1011;
       } else if (authUuid === process.env.BOT_UUID_FLEX1) {
-        // Based on 15168 wins and 27 losses against random.
-        elo = 2100;
+        // Based on a score of 104194 out of 104330 games against random.
+        elo = 2154;
+      } else if (authUuid === process.env.BOT_UUID_SOFT_FLEX1) {
+        // Based on a score of 99075 out of 100026 games against random.
+        elo = 1807;
       }
       if (content.gameType === 'realtime') {
         await sql`UPDATE users SET elo_realtime = ${elo} WHERE auth_uuid = ${authUuid};`;
