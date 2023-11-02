@@ -19,6 +19,7 @@ export class DatabaseSocket {
 
   reject(content: ClientMessage | DatabaseMessage) {
     if (
+      content.type === 'database:self' ||
       content.type === 'database:hello' ||
       content.type === 'database:user' ||
       content.type === 'database:replays' ||

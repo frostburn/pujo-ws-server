@@ -213,9 +213,9 @@ socket.addMessageListener((data: ServerMessage) => {
     console.log(`Game Over: ${result}, ${data.reason}`);
     socket.requestGame('pausing');
     // Update Elo rating
-    socket.sendMessage({type: 'user'});
+    socket.sendMessage({type: 'self'});
   }
-  if (data.type === 'user') {
+  if (data.type === 'self') {
     console.log(`Setting Elo rating to ${data.eloPausing}`);
     elo = data.eloPausing;
   }
@@ -225,7 +225,7 @@ socket.addEventListener('open', () => {
   console.log('Connection established.');
   // Identify the bot and update Elo rating
   socket.sendMessage({
-    type: 'user',
+    type: 'self',
     username,
     authUuid,
     isBot: true,

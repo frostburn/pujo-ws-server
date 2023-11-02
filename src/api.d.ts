@@ -104,8 +104,8 @@ type ClientRelay = {
   socketId?: number;
 };
 
-interface UserMessage extends ClientRelay {
-  type: 'user';
+interface SelfMessage extends ClientRelay {
+  type: 'self';
   username?: string;
   isBot?: boolean;
   clientInfo?: ApplicationInfo;
@@ -143,19 +143,25 @@ interface GetReplay extends ClientRelay {
   id: number;
 }
 
+interface GetUser extends ClientRelay {
+  type: 'get user';
+  id: number;
+}
+
 type ClientMessage =
   | GameRequest
   | ChallengeListRequest
   | AcceptChallenge
   | CancelGameRequest
-  | UserMessage
+  | SelfMessage
   | SimpleStateRequest
   | ResultMessage
   | ReadyMessage
   | PausingMove
   | RealtimeMove
   | ListReplays
-  | GetReplay;
+  | GetReplay
+  | GetUser;
 
 // Outgoing (server's perspective)
 
@@ -216,8 +222,9 @@ type TimerMessage = {
   msRemaining: number;
 };
 
-type ServerUserMessage = {
-  type: 'user';
+type ServerSelfReply = {
+  type: 'self';
+  id: number;
   username: string;
   eloRealtime: number;
   eloPausing: number;
@@ -248,6 +255,15 @@ type ServerReplay = {
   replay?: Replay;
 };
 
+type ServerUser = {
+  type: 'user';
+  user?: {
+    username: string;
+    eloRealtime: number;
+    eloPausing: number;
+  };
+};
+
 type ServerMessage =
   | GameParams
   | PieceMessage
@@ -257,12 +273,13 @@ type ServerMessage =
   | TimerMessage
   | ServerPausingMove
   | ServerRealtimeMove
-  | ServerUserMessage
+  | ServerSelfReply
   | ChallengeNotFound
   | ChallengeList
   | GoMessage
   | ServerReplays
-  | ServerReplay;
+  | ServerReplay
+  | ServerUser;
 
 // Database interaction
 
@@ -276,9 +293,9 @@ type DatabaseRelay = {
   authorization: string;
 };
 
-interface DatabaseUser extends DatabaseRelay {
-  type: 'database:user';
-  payload: ServerUserMessage;
+interface DatabaseSelf extends DatabaseRelay {
+  type: 'database:self';
+  payload: ServerSelfReply;
 }
 
 interface DatabaseReplays extends DatabaseRelay {
@@ -291,11 +308,17 @@ interface DatabaseReplay extends DatabaseRelay {
   payload: ServerReplay;
 }
 
+interface DatabaseUser extends DatabaseRelay {
+  type: 'database:user';
+  payload: ServerUser;
+}
+
 type DatabaseMessage =
   | DatabaseHello
-  | DatabaseUser
+  | DatabaseSelf
   | DatabaseReplays
-  | DatabaseReplay;
+  | DatabaseReplay
+  | DatabaseUser;
 
 type EloUpdate = {
   type: 'elo update';
@@ -314,6 +337,7 @@ type ReplayInsert = {
 type DatabaseQuery =
   | EloUpdate
   | ReplayInsert
-  | UserMessage
+  | SelfMessage
   | ListReplays
-  | GetReplay;
+  | GetReplay
+  | GetUser;

@@ -29,6 +29,17 @@ ws.on('close', () => {
   console.error('Database client disconnected');
 });
 
+function relayPayload(ws, type, content, payload) {
+  ws.send(
+    JSON.stringify({
+      type,
+      authorization,
+      socketId: content.socketId,
+      payload,
+    })
+  );
+}
+
 async function onMessage(data) {
   console.log('Database client received data');
   let content;
@@ -39,7 +50,7 @@ async function onMessage(data) {
   }
   console.log('Content:', content);
 
-  if (content.type === 'user') {
+  if (content.type === 'self') {
     let rows;
     if (content.username) {
       rows = await sql`UPDATE users SET username = ${clampString(
@@ -56,19 +67,24 @@ async function onMessage(data) {
         }, ${content.authUuid}, 1000, 1000) RETURNING *;`;
     }
     const payload = {
-      type: 'user',
+      type: 'self',
       username: rows[0].username,
       eloRealtime: rows[0].eloRealtime,
       eloPausing: rows[0].eloPausing,
     };
-    ws.send(
-      JSON.stringify({
-        type: 'database:user',
-        authorization,
-        socketId: content.socketId,
-        payload,
-      })
-    );
+    relayPayload(ws, 'database:self', content, payload);
+    return;
+  }
+
+  if (content.type === 'get user') {
+    const rows =
+      await sql`SELECT username, elo_realtime, elo_pausing FROM users WHERE id = ${content.id};`;
+    const user = rows.length ? rows[0] : undefined;
+    const payload = {
+      type: 'user',
+      user,
+    };
+    relayPayload(ws, 'database:user', content, payload);
     return;
   }
 
@@ -167,14 +183,7 @@ async function onMessage(data) {
       type: 'replays',
       replays,
     };
-    ws.send(
-      JSON.stringify({
-        type: 'database:replays',
-        authorization,
-        socketId: content.socketId,
-        payload,
-      })
-    );
+    relayPayload(ws, 'database:replays', content, payload);
     return;
   }
 
@@ -184,14 +193,7 @@ async function onMessage(data) {
       type: 'replay',
       replay,
     };
-    ws.send(
-      JSON.stringify({
-        type: 'database:replay',
-        authorization,
-        socketId: content.socketId,
-        payload,
-      })
-    );
+    relayPayload(ws, 'database:replay', content, payload);
     return;
   }
 }

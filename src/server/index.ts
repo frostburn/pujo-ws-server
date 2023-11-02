@@ -206,7 +206,7 @@ const server = Bun.serve<{socketId: number}>({
         return;
       }
 
-      if (content.type === 'database:user') {
+      if (content.type === 'database:self') {
         const receiver = playerBySocketId.get(content.socketId);
         if (receiver) {
           receiver.eloRealtime = content.payload.eloRealtime;
@@ -218,7 +218,8 @@ const server = Bun.serve<{socketId: number}>({
 
       if (
         content.type === 'database:replays' ||
-        content.type === 'database:replay'
+        content.type === 'database:replay' ||
+        content.type === 'database:user'
       ) {
         const receiver = playerBySocketId.get(content.socketId);
         if (receiver) {
@@ -229,7 +230,7 @@ const server = Bun.serve<{socketId: number}>({
 
       const player = playerBySocketId.get(ws.data.socketId)!;
 
-      if (content.type === 'user') {
+      if (content.type === 'self') {
         if (content.username) {
           player.name = clampString(content.username, 64);
         }
@@ -344,7 +345,11 @@ const server = Bun.serve<{socketId: number}>({
         });
       }
 
-      if (content.type === 'list replays' || content.type === 'get replay') {
+      if (
+        content.type === 'list replays' ||
+        content.type === 'get replay' ||
+        content.type === 'get user'
+      ) {
         if (databaseSocket) {
           content.socketId = ws.data.socketId;
           databaseSocket.send(content);
