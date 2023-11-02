@@ -136,6 +136,7 @@ interface ListReplays extends ClientRelay {
   orderBy?: string;
   direction?: 'ASC' | 'DESC';
   userId?: number;
+  finishedOnly?: boolean;
 }
 
 interface GetReplay extends ClientRelay {
