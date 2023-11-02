@@ -107,6 +107,9 @@ export class WebSocketSession {
   waitForMove(player: number) {
     this.waitingForMove[player] = true;
     const latePlayer = player;
+    if (this.timeouts[player] !== null) {
+      clearTimeout(this.timeouts[player]!);
+    }
     this.timeouts[player] = setTimeout(
       () => this.disqualifyPlayer(latePlayer),
       MAX_MOVE_TIME
@@ -121,6 +124,9 @@ export class WebSocketSession {
   }
 
   sendResult() {
+    if (this.done) {
+      return;
+    }
     const msSince1970 = new Date().valueOf();
     if (this.metadata) {
       this.metadata.endTime = msSince1970;
@@ -208,7 +214,9 @@ export class WebSocketSession {
       if (content.type === 'pausing move' && !this.waitingForMove[index]) {
         return;
       }
-      clearTimeout(this.timeouts[index]!);
+      if (this.timeouts[index] !== null) {
+        clearTimeout(this.timeouts[index]!);
+      }
       this.waitingForMove[index] = false;
       // Subclass hook
       this.onMove(index, content);

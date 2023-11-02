@@ -48,6 +48,11 @@ function onPausingComplete(session: WebSocketSession) {
       authUuids,
     });
   }
+  console.log(
+    'Pausing complete.',
+    sessionBySocketId.size,
+    'total session handles.'
+  );
 }
 
 function onRealtimeComplete(session: WebSocketSession) {
@@ -79,6 +84,13 @@ function onRealtimeComplete(session: WebSocketSession) {
       authUuids,
     });
   }
+  console.log(
+    'Realtime complete.',
+    activeRealtimeSessions.length,
+    'active sessions remain.',
+    sessionBySocketId.size,
+    'total session handles.'
+  );
 }
 
 // This loop should probably run in a worker/child process if the cloud server ever upgrades.
@@ -261,7 +273,8 @@ const server = Bun.serve<{socketId: number}>({
         if (content.autoMatch) {
           for (const challenge of challenges) {
             if (challenge.player === player) {
-              continue;
+              // Abort: Misbehaving client.
+              return;
             }
             if (!challenge.autoMatch || challenge.password !== undefined) {
               continue;
