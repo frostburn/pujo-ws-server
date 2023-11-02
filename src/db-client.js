@@ -157,38 +157,26 @@ async function onMessage(data) {
     const limit = Math.max(1, Math.min(50, parseInt(content.limit) | 0));
     const offset = Math.max(0, parseInt(content.offset) | 0);
 
-    // XXX: This is a horrible way to dynamically spoof tagged template literals.
-    const strings = [
-      'SELECT id, winner, reason, names, elos, event, site, round, ms_since1970, end_time, type, time_control, left_player, right_player',
-    ];
-    strings[0] += ' FROM replays WHERE NOT private';
-    const args = [];
-    if (content.finishedOnly) {
-      strings[0] += " AND reason IN ('lockout', 'double lockout')";
-    }
-    if (content.userId !== undefined) {
-      strings[0] += ' AND (left_player = ';
-      args.push(content.userId);
-      strings.push(' OR right_player = ');
-      args.push(content.userId);
-      strings.push(')');
-    }
-    strings[strings.length - 1] += ' ORDER BY ';
-    args.push(content.orderBy ?? 'id');
-    if (content.direction === 'DESC') {
-      strings.push(' DESC');
-    } else {
-      strings.push(' ASC');
-    }
-    strings[strings.length - 1] += ' LIMIT ';
-    args.push(limit);
-    strings.push(' OFFSET ');
-    args.push(offset);
-    strings.push(';');
-    const spoof = [...strings];
-    spoof.raw = strings;
-    const replays = await sql(spoof, ...args);
-    // XXX: But it's a lot terser than repeating the dynamic pieces...
+    const uid = content.userId;
+    const replays = await sql`
+      SELECT id, winner, reason, names, elos, event, site, round, ms_since1970, end_time, type, time_control, left_player, right_player
+        FROM replays WHERE NOT private ${
+          content.finishedOnly
+            ? sql`AND reason IN ('lockout', 'double lockout') ${
+                uid === undefined
+                  ? sql``
+                  : sql`AND (left_player = ${uid} OR right_player = ${uid})`
+              }`
+            : sql`${
+                uid === undefined
+                  ? sql``
+                  : sql`AND (left_player = ${uid} OR right_player = ${uid})`
+              }`
+        }
+        ORDER BY ${content.ordeBy ?? 'id'} ${
+          content.direction === 'DESC' ? sql`DESC` : sql`ASC`
+        } LIMIT ${limit} OFFSET ${offset};
+    `;
 
     for (const replay of replays) {
       replay.userIds = [replay.leftPlayer, replay.rightPlayer];
