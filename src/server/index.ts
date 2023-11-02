@@ -118,6 +118,18 @@ function tick() {
 let tickId: Timer = setTimeout(tick, 1);
 
 function startSession(challenge: OpenChallenge, challenger: Player) {
+  // Disregard request if already in game
+  // Note that this only applies per socket. One user may play multiple games.
+  const socketIds = [
+    challenge.player.socket.data.socketId,
+    challenger.socket.data.socketId,
+  ];
+  for (const socketId of socketIds) {
+    if (sessionBySocketId.has(socketId)) {
+      console.log(`Duplicate game request from ${socketId}`);
+      return;
+    }
+  }
   const players = [challenge.player, challenger];
   let session: PausingSession | RealtimeSession;
   if (challenge.gameType === 'pausing') {
@@ -264,12 +276,6 @@ const server = Bun.serve<{socketId: number}>({
       }
 
       if (content.type === 'game request') {
-        // Disregard request if already in game
-        // Note that this only applies per socket. One user may play multiple games.
-        if (sessionBySocketId.has(ws.data.socketId)) {
-          console.log(`Duplicate game request from ${ws.data.socketId}`);
-          return;
-        }
         if (content.autoMatch) {
           for (const challenge of challenges) {
             if (challenge.player === player) {
