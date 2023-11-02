@@ -16,10 +16,12 @@ import {ServerMessage} from './api';
 
 config();
 
-const args = argParse(process.argv.slice(2));
-
-args.server = args.server || 'ws://localhost:3003';
-args.bot = args.bot || 'flex2';
+const args = argParse(process.argv.slice(2), {
+  default: {
+    server: 'ws://localhost:3003',
+    bot: 'flex2',
+  },
+});
 
 const BOTS: Record<
   string,

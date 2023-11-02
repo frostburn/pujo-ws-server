@@ -158,10 +158,9 @@ const server = Bun.serve<{socketId: number}>({
 
       const player = playerBySocketId.get(ws.data.socketId)!;
 
-      for (const challenge of challenges) {
+      for (const challenge of [...challenges]) {
         if (challenge.player === player) {
           challenges.delete(challenge);
-          break;
         }
       }
 
@@ -261,6 +260,9 @@ const server = Bun.serve<{socketId: number}>({
         }
         if (content.autoMatch) {
           for (const challenge of challenges) {
+            if (challenge.player === player) {
+              continue;
+            }
             if (!challenge.autoMatch || challenge.password !== undefined) {
               continue;
             }
