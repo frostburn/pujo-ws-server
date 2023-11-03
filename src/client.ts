@@ -152,7 +152,7 @@ socket.addMessageListener((data: ServerMessage) => {
           socket.sendMessage({
             type: 'pausing move',
             pass: false,
-            hardDrop: true,
+            hardDrop: !args.soft,
             msRemaining,
             ...move,
           });
