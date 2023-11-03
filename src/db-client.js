@@ -2,6 +2,7 @@ import WebSocket from 'ws';
 import sql from './db.js';
 import {updateElos} from './elo.js';
 import {loadReplay, saveReplay} from './storage.js';
+import {repairReplay} from 'pujo-puyo-core';
 
 const MAX_REPLAYS_PER_ORDERED_PAIR = 500;
 
@@ -133,12 +134,7 @@ async function onMessage(data) {
         await sql`SELECT id FROM users WHERE auth_uuid = ${authUuid};`;
       userIds.push(rows[0].id);
     }
-    if (content.marginFrames === null) {
-      content.marginFrames = Infinity;
-    }
-    if (content.mercyFrames === null) {
-      content.mercyFrames = Infinity;
-    }
+    content.replay = repairReplay(content.replay);
     await saveReplay(content.replay, content.private, userIds);
 
     const rows =
@@ -173,7 +169,7 @@ async function onMessage(data) {
                   : sql`AND (left_player = ${uid} OR right_player = ${uid})`
               }`
         }
-        ORDER BY ${content.ordeBy ?? 'id'} ${
+        ORDER BY ms_since1970 ${
           content.direction === 'DESC' ? sql`DESC` : sql`ASC`
         } LIMIT ${limit} OFFSET ${offset};
     `;
