@@ -154,21 +154,19 @@ async function onMessage(data) {
     const offset = Math.max(0, parseInt(content.offset) | 0);
 
     const uid = content.userId;
+
+    const uidFragment =
+      uid === undefined
+        ? sql``
+        : sql`AND (left_player = ${uid} OR right_player = ${uid})`;
+
+    const extraWhere = content.finishedOnly
+      ? sql`AND reason IN ('lockout', 'double lockout') ${uidFragment}`
+      : uidFragment;
+
     const replays = await sql`
       SELECT id, winner, reason, names, elos, event, site, round, ms_since1970, end_time, type, time_control, left_player, right_player
-        FROM replays WHERE NOT private ${
-          content.finishedOnly
-            ? sql`AND reason IN ('lockout', 'double lockout') ${
-                uid === undefined
-                  ? sql``
-                  : sql`AND (left_player = ${uid} OR right_player = ${uid})`
-              }`
-            : sql`${
-                uid === undefined
-                  ? sql``
-                  : sql`AND (left_player = ${uid} OR right_player = ${uid})`
-              }`
-        }
+        FROM replays WHERE NOT private ${extraWhere}
         ORDER BY ms_since1970 ${
           content.direction === 'DESC' ? sql`DESC` : sql`ASC`
         } LIMIT ${limit} OFFSET ${offset};
@@ -184,9 +182,14 @@ async function onMessage(data) {
       }
     }
 
+    const rows =
+      await sql`SELECT COUNT(id) FROM replays WHERE NOT private ${extraWhere}`;
+    const totalCount = rows[0].count;
+
     const payload = {
       type: 'replays',
       replays,
+      totalCount,
     };
     relayPayload(ws, 'database:replays', content, payload);
     return;
