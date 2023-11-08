@@ -7,6 +7,7 @@ import {
   ReplayMetadata,
   ReplayResultReason,
   TimeWarpingGame,
+  randomBag,
   randomColorSelection,
   randomSeed,
 } from 'pujo-puyo-core';
@@ -48,9 +49,10 @@ export type CompleteCallback = (session: WebSocketSession) => void;
 export class WebSocketSession {
   type: GameType | undefined = undefined;
 
-  gameSeed: number;
-  screenSeed: number;
+  gameSeeds: number[];
+  screenSeeds: number[];
   colorSelections: number[][];
+  initialBags: number[][];
   metadata?: ReplayMetadata;
   winner?: number;
   reason: ReplayResultReason;
@@ -64,10 +66,12 @@ export class WebSocketSession {
   onComplete?: CompleteCallback;
 
   constructor(players: Player[], private_: boolean, verbose?: boolean) {
-    this.gameSeed = randomSeed();
-    this.screenSeed = randomSeed();
+    this.gameSeeds = [randomSeed(), randomSeed()];
+    this.screenSeeds = [randomSeed(), randomSeed()];
     const colorSelection = randomColorSelection();
     this.colorSelections = [colorSelection, colorSelection];
+    const initialBag = randomBag(colorSelection);
+    this.initialBags = [initialBag, initialBag];
     this.players = players;
     this.ready = Array(players.length).fill(false);
     this.waitingForMove = Array(players.length).fill(false);
@@ -82,17 +86,16 @@ export class WebSocketSession {
     if (!this.metadata) {
       throw new Error('Metadata must be set before calling start');
     }
-    const initialBags = origin.initialBags;
     this.players.forEach((player, i) => {
       this.ready[i] = false;
       player.send({
         type: 'game params',
         colorSelections: this.colorSelections,
-        screenSeed: this.screenSeed,
+        screenSeeds: this.screenSeeds,
         targetPoints: origin.targetPoints,
         marginFrames: origin.marginFrames,
         mercyFrames: origin.mercyFrames,
-        initialBags,
+        initialBags: origin.initialBags,
         identity: i,
         metadata: this.metadata!,
       });
@@ -100,7 +103,7 @@ export class WebSocketSession {
     });
     if (this.verbose) {
       origin.log();
-      console.log(`Starting game ${this.gameSeed} (${this.screenSeed})`);
+      console.log(`Starting game ${this.gameSeeds} (${this.screenSeeds})`);
     }
   }
 
@@ -136,7 +139,8 @@ export class WebSocketSession {
       winner: this.winner,
       reason: this.reason,
       msSince1970,
-      gameSeed: this.gameSeed,
+      gameSeeds: this.gameSeeds,
+      initialBags: this.initialBags,
     };
     if (this.verbose) {
       console.log('Sending result', result);
@@ -177,7 +181,8 @@ export class WebSocketSession {
           winner: this.winner,
           reason: this.reason,
           msSince1970,
-          gameSeed: this.gameSeed,
+          gameSeeds: this.gameSeeds,
+          initialBags: this.initialBags,
         };
         if (this.verbose) {
           console.log('Sending result', result);
@@ -269,9 +274,10 @@ export class WebSocketSession {
       throw new Error('Metadata must be set before converting to replay');
     }
     return {
-      gameSeed: this.gameSeed,
-      screenSeed: this.screenSeed,
+      gameSeeds: this.gameSeeds,
+      screenSeeds: this.screenSeeds,
       colorSelections: this.colorSelections,
+      initialBags: this.initialBags,
       marginFrames: NaN,
       mercyFrames: NaN,
       targetPoints: [NaN, NaN],
@@ -297,9 +303,10 @@ export class PausingSession extends WebSocketSession {
   constructor(players: Player[], private_: boolean, verbose?: boolean) {
     super(players, private_, verbose);
     this.game = new MultiplayerGame(
-      this.gameSeed,
-      this.screenSeed,
-      this.colorSelections
+      this.gameSeeds,
+      this.screenSeeds,
+      this.colorSelections,
+      this.initialBags
     );
     this.passed = Array(players.length).fill(false);
     // TODO: True multiplayer
@@ -449,9 +456,10 @@ export class RealtimeSession extends WebSocketSession {
   constructor(players: Player[], private_: boolean, verbose?: boolean) {
     super(players, private_, verbose);
     const origin = new MultiplayerGame(
-      this.gameSeed,
-      this.screenSeed,
-      this.colorSelections
+      this.gameSeeds,
+      this.screenSeeds,
+      this.colorSelections,
+      this.initialBags
     );
     this.game = new TimeWarpingGame(
       origin,

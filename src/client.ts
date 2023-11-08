@@ -93,14 +93,13 @@ socket.addMessageListener((data: ServerMessage) => {
   if (data.type === 'game params') {
     mirrorGame = new MultiplayerGame(
       null,
-      data.screenSeed,
+      data.screenSeeds,
       data.colorSelections,
+      data.initialBags,
       data.targetPoints,
-      data.marginFrames
+      data.marginFrames,
+      data.mercyFrames
     );
-    for (let i = 0; i < data.initialBags.length; ++i) {
-      mirrorGame.games[i].bag = data.initialBags[i];
-    }
     identity = data.identity;
     if (data.metadata.timeControl) {
       timer = FischerTimer.fromString(data.metadata.timeControl);

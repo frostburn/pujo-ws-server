@@ -99,6 +99,7 @@ export async function loadReplay(replayId) {
   const data = rows[0];
 
   delete data.id;
+  delete data.private;
   delete data.leftPlayer;
   delete data.rightPlayer;
 
@@ -108,8 +109,8 @@ export async function loadReplay(replayId) {
     }
   }
 
-  data.gameSeed = parseInt(data.gameSeed, 10);
-  data.screenSeed = parseInt(data.screenSeed, 10);
+  data.gameSeeds = data.gameSeeds.map(s => parseInt(s, 10));
+  data.screenSeeds = data.screenSeeds.map(s => parseInt(s, 10));
   data.moves = data.moves.map(decodeMove);
 
   data.result = {

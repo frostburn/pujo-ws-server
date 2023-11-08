@@ -35,9 +35,10 @@ import sql from './db.js';
     id SERIAL PRIMARY KEY,
     private BOOLEAN,
     -- Main fields
-    game_seed BIGINT NOT NULL,
-    screen_seed BIGINT NOT NULL,
+    game_seeds BIGINT[] NOT NULL,
+    screen_seeds BIGINT[] NOT NULL,
     color_selections SMALLINT[][] NOT NULL,
+    initial_bags SMALLINT[][] NOT NULL,
     target_points SMALLINT[] NOT NULL,
     margin_frames REAL NOT NULL,
     mercy_frames REAL NOT NULL,
