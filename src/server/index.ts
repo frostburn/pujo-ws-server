@@ -307,6 +307,20 @@ const server = Bun.serve<{socketId: number}>({
           });
         } else {
           const challenge = sanitizeChallenge(content);
+          // Private challenges are unlisted so there's no way for a client to differentiate between issuing and accepting challenges.
+          if (challenge.password !== undefined) {
+            for (const existing of challenges) {
+              if (existing.player === player) {
+                // Abort: Misbehaving client.
+                return;
+              }
+              if (existing.password === challenge.password) {
+                startSession(existing, player);
+                return;
+              }
+            }
+          }
+          // Pairing not allowed or no matching private challenge found.
           challenges.add({
             player,
             ...challenge,
@@ -347,12 +361,8 @@ const server = Bun.serve<{socketId: number}>({
       }
       if (content.type === 'accept challenge') {
         for (const challenge of challenges) {
-          if (
-            challenge.password !== undefined &&
-            challenge.password === content.password
-          ) {
-            startSession(challenge, player);
-            return;
+          if (challenge.password !== undefined) {
+            continue;
           }
           if (challenge.uuid === content.uuid) {
             startSession(challenge, player);
@@ -362,7 +372,6 @@ const server = Bun.serve<{socketId: number}>({
         player.send({
           type: 'challenge not found',
           uuid: content.uuid,
-          password: content.password,
         });
       }
 
