@@ -232,6 +232,7 @@ const server = Bun.serve<{socketId: number}>({
       if (content.type === 'database:self') {
         const receiver = playerBySocketId.get(content.socketId);
         if (receiver) {
+          receiver.name = content.payload.username;
           receiver.eloRealtime = content.payload.eloRealtime;
           receiver.eloPausing = content.payload.eloPausing;
           receiver.send(content.payload);
