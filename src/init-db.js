@@ -34,14 +34,18 @@ import sql from './db.js';
   await sql`CREATE TABLE replays (
     id SERIAL PRIMARY KEY,
     private BOOLEAN,
-    -- Main fields
-    game_seeds BIGINT[] NOT NULL,
-    screen_seeds BIGINT[] NOT NULL,
+    -- Params fields
+    bag_seeds BIGINT[] NOT NULL,
+    garbage_seeds BIGINT[] NOT NULL,
     color_selections SMALLINT[][] NOT NULL,
     initial_bags SMALLINT[][] NOT NULL,
-    target_points SMALLINT[] NOT NULL,
+    -- Params.rules fields
+    clear_threshold SMALLINT NOT NULL,
+    jiggle_frames SMALLINT NOT NULL,
+    spark_frames SMALLINT NOT NULL,
     margin_frames REAL NOT NULL,
     mercy_frames REAL NOT NULL,
+    target_points SMALLINT[] NOT NULL,
     -- Moves are stored as horrible byte balls to save space
     moves INT[] NOT NULL,
     -- ReplayResult fields

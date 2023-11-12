@@ -5,17 +5,17 @@ import {
   PlayedMove,
   Replay,
   ReplayMetadata,
+  ReplayParams,
   ReplayResultReason,
   TimeWarpingGame,
-  randomBag,
-  randomColorSelection,
-  randomSeed,
+  randomMultiplayer,
 } from 'pujo-puyo-core';
 import {Player} from './player';
 import {
   ClientMessage,
   GameResult,
   GameType,
+  PartialParams,
   PausingMove,
   PieceMessage,
   RealtimeMove,
@@ -49,10 +49,7 @@ export type CompleteCallback = (session: WebSocketSession) => void;
 export class WebSocketSession {
   type: GameType | undefined = undefined;
 
-  gameSeeds: number[];
-  screenSeeds: number[];
-  colorSelections: number[][];
-  initialBags: number[][];
+  params: ReplayParams;
   metadata?: ReplayMetadata;
   winner?: number;
   reason: ReplayResultReason;
@@ -66,12 +63,7 @@ export class WebSocketSession {
   onComplete?: CompleteCallback;
 
   constructor(players: Player[], private_: boolean, verbose?: boolean) {
-    this.gameSeeds = [randomSeed(), randomSeed()];
-    this.screenSeeds = [randomSeed(), randomSeed()];
-    const colorSelection = randomColorSelection();
-    this.colorSelections = [colorSelection, colorSelection];
-    const initialBag = randomBag(colorSelection);
-    this.initialBags = [initialBag, initialBag];
+    this.params = randomMultiplayer();
     this.players = players;
     this.ready = Array(players.length).fill(false);
     this.waitingForMove = Array(players.length).fill(false);
@@ -86,16 +78,16 @@ export class WebSocketSession {
     if (!this.metadata) {
       throw new Error('Metadata must be set before calling start');
     }
+    const params: PartialParams = {
+      ...this.params,
+      bagSeeds: null,
+      initialBags: this.params.initialBags.map(b => b.slice(0, 4)),
+    };
     this.players.forEach((player, i) => {
       this.ready[i] = false;
       player.send({
         type: 'game params',
-        colorSelections: this.colorSelections,
-        screenSeeds: this.screenSeeds,
-        targetPoints: origin.targetPoints,
-        marginFrames: origin.marginFrames,
-        mercyFrames: origin.mercyFrames,
-        initialBags: origin.initialBags,
+        params,
         identity: i,
         metadata: this.metadata!,
       });
@@ -103,7 +95,9 @@ export class WebSocketSession {
     });
     if (this.verbose) {
       origin.log();
-      console.log(`Starting game ${this.gameSeeds} (${this.screenSeeds})`);
+      console.log(
+        `Starting game ${this.params.garbageSeeds} (${this.params.garbageSeeds})`
+      );
     }
   }
 
@@ -139,8 +133,8 @@ export class WebSocketSession {
       winner: this.winner,
       reason: this.reason,
       msSince1970,
-      gameSeeds: this.gameSeeds,
-      initialBags: this.initialBags,
+      bagSeeds: this.params.bagSeeds,
+      initialBags: this.params.initialBags,
     };
     if (this.verbose) {
       console.log('Sending result', result);
@@ -181,8 +175,8 @@ export class WebSocketSession {
           winner: this.winner,
           reason: this.reason,
           msSince1970,
-          gameSeeds: this.gameSeeds,
-          initialBags: this.initialBags,
+          bagSeeds: this.params.bagSeeds,
+          initialBags: this.params.initialBags,
         };
         if (this.verbose) {
           console.log('Sending result', result);
@@ -274,13 +268,7 @@ export class WebSocketSession {
       throw new Error('Metadata must be set before converting to replay');
     }
     return {
-      gameSeeds: this.gameSeeds,
-      screenSeeds: this.screenSeeds,
-      colorSelections: this.colorSelections,
-      initialBags: this.initialBags,
-      marginFrames: NaN,
-      mercyFrames: NaN,
-      targetPoints: [NaN, NaN],
+      params: this.params,
       moves: [],
       metadata: this.metadata,
       result: {
@@ -302,12 +290,7 @@ export class PausingSession extends WebSocketSession {
 
   constructor(players: Player[], private_: boolean, verbose?: boolean) {
     super(players, private_, verbose);
-    this.game = new MultiplayerGame(
-      this.gameSeeds,
-      this.screenSeeds,
-      this.colorSelections,
-      this.initialBags
-    );
+    this.game = new MultiplayerGame(this.params);
     this.passed = Array(players.length).fill(false);
     // TODO: True multiplayer
     this.hiddenMove = null;
@@ -439,9 +422,6 @@ export class PausingSession extends WebSocketSession {
 
   toReplay(): Replay {
     const result = super.toReplay();
-    result.marginFrames = this.game.marginFrames;
-    result.mercyFrames = this.game.mercyFrames;
-    result.targetPoints = this.game.targetPoints;
     result.moves = this.playedMoves;
     return result;
   }
@@ -455,12 +435,7 @@ export class RealtimeSession extends WebSocketSession {
 
   constructor(players: Player[], private_: boolean, verbose?: boolean) {
     super(players, private_, verbose);
-    const origin = new MultiplayerGame(
-      this.gameSeeds,
-      this.screenSeeds,
-      this.colorSelections,
-      this.initialBags
-    );
+    const origin = new MultiplayerGame(this.params);
     this.game = new TimeWarpingGame(
       origin,
       CHECKPOINT_INTERVAL,
@@ -575,9 +550,6 @@ export class RealtimeSession extends WebSocketSession {
 
   toReplay(): Replay {
     const result = super.toReplay();
-    result.marginFrames = this.game.origin.marginFrames;
-    result.mercyFrames = this.game.origin.mercyFrames;
-    result.targetPoints = this.game.origin.targetPoints;
     result.moves = this.game.moves;
     return result;
   }

@@ -104,7 +104,7 @@ function tick() {
   }
   for (const session of activeRealtimeSessions) {
     if (args.debug) {
-      console.log('Tick of', session.gameSeeds, ':', session.age);
+      console.log('Tick of', session.params.bagSeeds, ':', session.age);
     }
     session.tick();
   }

@@ -8,6 +8,22 @@ const PLAYER_BITS = 3; // Up to 8 players for future compatibility
 // Remaining bits implicitly allocated to 'time'
 // const TIME_BITS = 31 - ORIENTATION_BITS - Y1_BITS - X1_BITS - PLAYER_BITS;
 
+const PARAMS_FIELDS = [
+  'bagSeeds',
+  'garbageSeeds',
+  'colorSelections',
+  'initialBags',
+];
+
+const RULES_FIELDS = [
+  'clearThreshold',
+  'jiggleFrames',
+  'sparkFrames',
+  'marginFrames',
+  'mercyFrames',
+  'targetPoints',
+];
+
 const METADATA_FIELDS = [
   'names',
   'elos',
@@ -68,10 +84,17 @@ function decodeMove(byteBall) {
 }
 
 export async function saveReplay(replay, private_, userIds) {
-  const data = {...replay, ...replay.metadata};
+  const data = {
+    ...replay,
+    ...replay.params,
+    ...replay.params.rules,
+    ...replay.metadata,
+  };
   data.private = private_;
 
   delete data.result;
+  delete data.rules;
+  delete data.params;
   delete data.metadata;
 
   data.winner = replay.result.winner;
@@ -109,8 +132,8 @@ export async function loadReplay(replayId) {
     }
   }
 
-  data.gameSeeds = data.gameSeeds.map(s => parseInt(s, 10));
-  data.screenSeeds = data.screenSeeds.map(s => parseInt(s, 10));
+  data.bagSeeds = data.bagSeeds.map(s => parseInt(s, 10));
+  data.garbageSeeds = data.garbageSeeds.map(s => parseInt(s, 10));
   data.moves = data.moves.map(decodeMove);
 
   data.result = {
@@ -119,6 +142,20 @@ export async function loadReplay(replayId) {
   };
   delete data.winner;
   delete data.reason;
+
+  data.params = {};
+
+  for (const field of PARAMS_FIELDS) {
+    data.params[field] = data[field];
+    delete data[field];
+  }
+
+  data.params.rules = {};
+
+  for (const field of RULES_FIELDS) {
+    data.params.rules[field] = data[field];
+    delete data[field];
+  }
 
   data.metadata = {};
 

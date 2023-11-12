@@ -86,14 +86,7 @@ socket.addMessageListener((data: ServerMessage) => {
     console.log('Message received', data);
   }
   if (data.type === 'game params') {
-    const origin = new MultiplayerGame(
-      null,
-      data.screenSeeds,
-      data.colorSelections,
-      data.initialBags,
-      data.targetPoints,
-      data.marginFrames
-    );
+    const origin = new MultiplayerGame(data.params);
     mirrorGame = new TimeWarpingMirror(origin);
     identity = data.identity;
     socket.sendMessage({type: 'ready'});
